@@ -52,7 +52,7 @@ image = np.fft.ifftn(virtual_coil_data, axes=(0, 1, 3)) # compute the Fourier tr
 image_rss = rsos(image) 
 
 data_slice_axial = data[:, :, : , z_slice] # get an axial slice of k-space data
-kspace_rss_axial = rsos(data_slice_axial) # compute rsos of k-space slice WHAT SWITCH, RSS THEN KSPACE SLICE
+kspace_rss_axial = rsos(data_slice_axial) # compute rsos of k-space slice 
 
 image_axial = image_rss[:, :, z_slice] # get an axial slice from the reconstructed image
 image_shifted_axial = np.fft.ifftshift(image_axial, axes=(0,1)) # shift image to center 0 frequency
