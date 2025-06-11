@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.linalg import eig
+from scipy.linalg import eigh
 
 def rovir(data, maskA, maskB):
     '''
@@ -25,16 +25,18 @@ def rovir(data, maskA, maskB):
 
     nc = data.shape[2] #number of channels 
 
-    maskA = np.expand_dims(maskA, axis = 2)
+    maskA = np.expand_dims(maskA, axis = 2) # to ensure mask has same dimensions as data
     maskB = np.expand_dims(maskB, axis = 2)
 
-    A = np.matmul(np.transpose(np.reshape(data*maskA, (-1, nc))), np.reshape(data*maskA, (-1, nc)))
-    
-    B = np.matmul(np.transpose(np.reshape(data*maskB, (-1, nc))), np.reshape(data*maskB, (-1, nc)))
+    maskedA = data*maskA
+    maskedB = data*maskB
+
+    A = np.reshape(maskedA, (-1, nc)).conj().T @ np.reshape(maskedA, (-1, nc)) 
+    B = np.reshape(maskedB, (-1, nc)).conj().T @ np.reshape(maskedB, (-1, nc))
 
     # compute a vector eigenvalues D and a matrix of eigenvectors V as columns
     # V[:, i] is the eigenvector corresponding to D[i]
-    D,V = eig(A, B)
+    D,V = eigh(A, B)
     # D,V = np.linalg.eigh(A, B) use this for complex Hermitian symmetric matrices
   
     # get index that would sort eigenvalues in descending order
@@ -71,8 +73,11 @@ def top_nv(V, data, maskA, maskB, sir_threshold):
     maskA = np.expand_dims(maskA, axis = 2)
     maskB = np.expand_dims(maskB, axis = 2)
 
-    A = np.matmul(np.transpose(np.reshape(data*maskA, (-1, nc))), np.reshape(data*maskA, (-1, nc)))
-    B = np.matmul(np.transpose(np.reshape(data*maskB, (-1, nc))), np.reshape(data*maskB, (-1, nc)))
+    maskedA = data*maskA
+    maskedB = data*maskB
+
+    A = np.reshape(maskedA, (-1, nc)).conj().T @ np.reshape(maskedA, (-1, nc)) 
+    B = np.reshape(maskedB, (-1, nc)).conj().T @ np.reshape(maskedB, (-1, nc)) 
 
     # signal = np.matrix.H(V)*A*V # Nc x Nc * Nc x Nc * Nc x Nc = Nc x Nc
     # interference = np.matrix.H(V)*B*V #Nc x Nc
@@ -90,8 +95,8 @@ def top_nv(V, data, maskA, maskB, sir_threshold):
 
     #vectorized version 
 
-    signal = np.matmul(np.matmul(np.transpose(V), A), V) 
-    interference = np.matmul(np.matmul(np.transpose(V), B), V) 
+    signal = V.conj().T @ A @ V 
+    interference = V.conj().T @ B @ V 
     sirs = np.abs(signal/interference) # entry-wise division
     sirs = np.diag(sirs) # diagonal of matrix is the vector of sirs
     for i, sir in enumerate(sirs):
@@ -104,18 +109,38 @@ def top_nv(V, data, maskA, maskB, sir_threshold):
 def form_virtual_coil_data(V, data):
 
     '''
+    Forms the virtual coil data by computing the linear combination of
+    the original data with the top eigenvectors. The virtual coil data
+    for the jth virtual coil is given by the linear combination of the 
+    original data with the jth eigenvector's elements as the coefficients.
+    
+    Parameters
+    ----------
+        V -> np.ndarray: an Nc x Nv array, with columns as the top Nv eigenvectors
+        data -> np.ndarray: a 4D array of MRI data, shape (x, y, ch, z)
+
+
+    Returns 
+    ----------
+        new_data -> np.ndarray: a 4D array of virtual coil data, shape (x, y, Nv, z)
     '''
 
     nv = V.shape[1] # number of top eigenvectors = number of virtual coils
     new_data = np.zeros((data.shape[0], data.shape[1], nv, data.shape[3]), dtype = data.dtype)
 
-    for i, eigenvec in enumerate(np.transpose(V)):
-        # data[x, y, :, z] = [d1, d2, ..., dNc]
-        # eigenvec = [w1, w2, ..., wNc]
-        # we want w1*d1 + w2*d2 + ... + wNc*dNc
-        # print(eigenvec.shape)
-        new_data[:, :, i, :] = np.tensordot(data, eigenvec, axes = ([2], [0]))
-    return new_data
+    # for i, eigenvec in enumerate(np.transpose(V)):
+    #     # data[x, y, :, z] = [d1, d2, ..., dNc]
+    #     # eigenvec = [w1, w2, ..., wNc]
+    #     # we want w1*d1 + w2*d2 + ... + wNc*dNc
+    #     # print(eigenvec.shape)
+    #     new_data[:, :, i, :] = np.tensordot(data, eigenvec, axes = ([2], [0]))
+    # return new_data
 
-    #vectorized version 
-    #new_data = 
+    # vectorized version
+    # with tensordot, the result retains all axes of both input arrays,
+    # except the axes that are summed over
+
+    new_data = np.tensordot(data, V, axes = ([2], [0]))
+    # (x, y, ch, z) * (ch, Nv) = (x, y, z, Nv)
+    new_data = np.moveaxis(new_data, -1, 2)
+    return new_data
