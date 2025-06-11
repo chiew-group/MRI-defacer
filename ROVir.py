@@ -47,7 +47,7 @@ def rovir(data, maskA, maskB):
     
     return V
 
-def top_nv(V, data, maskA, maskB, sir_threshold):
+def top_nv_sir(V, data, maskA, maskB, sir_threshold):
     '''
     Find the number of top Nv < Nc eigenvectors for the linear combination weight. 
     Calculated by first find the signal interference ratio for each coil, 
@@ -97,9 +97,10 @@ def top_nv(V, data, maskA, maskB, sir_threshold):
 
     signal = V.conj().T @ A @ V 
     interference = V.conj().T @ B @ V 
-    sirs = np.abs(signal/interference) # entry-wise division
+    sirs = np.abs(signal/(interference + 1e-12)) # entry-wise division
     sirs = np.diag(sirs) # diagonal of matrix is the vector of sirs
     for i, sir in enumerate(sirs):
+        print(sir)
         if sir < sir_threshold:
             return i-1
     return nc - 1

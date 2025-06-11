@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from ROVir import rovir
-from ROVir import top_nv
+from ROVir import top_nv_sir
 from ROVir import form_virtual_coil_data
 import time
 
@@ -20,9 +20,9 @@ z_slice = 60
 
 maskA = np.zeros((data.shape[0], data.shape[1], data.shape[3]))
 maskB = np.ones((data.shape[0], data.shape[1], data.shape[3])) # a 3D matrix of zeros
-margin = 50
-maskA[margin:-margin, margin:-margin, margin:-margin] = 1
-maskB[margin:-margin, margin:-margin, margin:-margin] = 0
+margin = 20
+maskA[margin+30:-margin, margin+30:-margin, margin+30:-margin] = 1
+maskB[margin+30:-margin, margin+30:-margin, margin+30:-margin] = 0
 
 start = time.time()
 V = rovir(data, maskA, maskB) #finding the eigenvectors 
@@ -33,14 +33,14 @@ start = time.time()
 # now choose the top nv eigencvectors
 # calculate signal interference ratio for each channel, keep only those with sir > 1
 # sir_threshold = input("Enter SIR thresshold, default is 1")
-i = top_nv(V, data, maskA, maskB, sir_threshold = 1) #finding 
+i = top_nv_sir(V, data, maskA, maskB, sir_threshold = 4) #finding 
 print(i)
 V_retain = V[:,:i] # keep only the top nv eigenvectors 
+
 end = time.time()
 print(f"Time taken for top_nv: {end - start} seconds")
 
 start = time.time()
-
 # now, the eigenvectors make up the linear combo weights
 # so we need to form the virtual coil data
 virtual_coil_data = form_virtual_coil_data(V_retain, data)
@@ -54,7 +54,16 @@ def rsos(data):
 image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(virtual_coil_data, axes = (0, 1, 3)), axes=(0, 1, 3)), axes = (0, 1, 3)) # compute the Fourier transform of data over x, y, z axes
 image_rss = rsos(image) 
 
-data_slice_axial = data[:, :, : , z_slice] # get an axial slice of k-space data
+figure = plt.figure(figsize = (20, 20))
+for coil in range(virtual_coil_data.shape[2]):
+    plt.subplot(8, 6, coil+1)
+    plt.imshow(np.abs(image[:, :, coil, z_slice]), cmap='gray')
+    plt.imshow(maskA[:, :, z_slice], alpha = 0.2, cmap='Greens')
+    plt.imshow(maskB[:, :, z_slice], alpha = 0.2, cmap='Reds')
+    plt.title(f'Virtual Coil {coil+1}')
+plt.show()
+
+data_slice_axial = virtual_coil_data[:, :, : , z_slice] # get an axial slice of k-space data
 kspace_rss_axial = rsos(data_slice_axial) # compute rsos of k-space slice
 
 image_axial = image_rss[:, :, z_slice] # get an axial slice from the reconstructed image
@@ -82,8 +91,8 @@ plt.imshow(np.log(np.abs(kspace_rss_axial)+1e-9), cmap='gray')
 plt.subplot(3,2,2)
 plt.title(f'Axial View z = {z_slice}')
 plt.imshow(np.rot90(image_axial,3), cmap='gray')
-plt.imshow(maskA[:, :, z_slice], alpha = 0.5, cmap='Greens')
-plt.imshow(maskB[:, :, z_slice], alpha = 0.5, cmap='Reds')
+plt.imshow(maskA[:, :, z_slice], alpha = 0.2, cmap='Greens')
+plt.imshow(maskB[:, :, z_slice], alpha = 0.2, cmap='Reds')
 
 plt.subplot(3,2,3)
 plt.title(f'Coronal K-space y = {y_slice}')
