@@ -1,5 +1,8 @@
 import numpy as np
 from scipy.linalg import eigh
+from scipy.linalg import norm
+from numpy.linalg import matrix_rank
+
 
 def rovir(data, maskA, maskB):
     '''
@@ -22,29 +25,27 @@ def rovir(data, maskA, maskB):
                         eigenvalue problem Av = DBv 
 
     '''
+    # check if eigenvectors are the same use matlab 
+    nc = data.shape[3] #number of channels 
 
-    nc = data.shape[2] #number of channels 
+    maskA = np.expand_dims(maskA, axis = 3) # to ensure mask has same dimensions as data
+    maskB = np.expand_dims(maskB, axis = 3)
 
-    maskA = np.expand_dims(maskA, axis = 2) # to ensure mask has same dimensions as data
-    maskB = np.expand_dims(maskB, axis = 2)
+    maskedA = data*maskA # applying masks by entry-wise mult
+    maskedB = data*maskB 
 
-    maskedA = data*maskA
-    maskedB = data*maskB
-
-    A = np.reshape(maskedA, (-1, nc)).conj().T @ np.reshape(maskedA, (-1, nc)) 
-    B = np.reshape(maskedB, (-1, nc)).conj().T @ np.reshape(maskedB, (-1, nc))
-
-    # compute a vector eigenvalues D and a matrix of eigenvectors V as columns
-    # V[:, i] is the eigenvector corresponding to D[i]
-    D,V = eigh(A, B)
-    # D,V = np.linalg.eigh(A, B) use this for complex Hermitian symmetric matrices
-  
-    # get index that would sort eigenvalues in descending order
-    i = np.argsort(D)[::-1] 
-
-    # rank eigenvectors by sorted eigenvalues
-    V = V[:, i]
+    A = np.reshape(maskedA, (-1, nc)).conj().T @ np.reshape(maskedA, (-1, nc)) # Nc x Nc
     
+    B = np.reshape(maskedB, (-1, nc)).conj().T @ np.reshape(maskedB, (-1, nc))
+    # print(matrix_rank(B))
+    D,V = eigh(A, B) # compute a vector eigenvalues D and a matrix of eigenvectors V as columns
+    # V[:, i] is the eigenvector corresponding to D[i]
+
+    i = np.argsort(D)[::-1] # get indices that would sort eigenvalues in descending order
+    print(abs(D[i]))
+
+    V = V[:, i] # rank eigenvectors by sorted eigenvalues
+
     return V
 
 def top_nv_sir(V, data, maskA, maskB, sir_threshold):
@@ -68,10 +69,10 @@ def top_nv_sir(V, data, maskA, maskB, sir_threshold):
         Nv -> int: the index of the last top Nv coil
     
     '''
-    nc = data.shape[2] #number of channels 
+    nc = data.shape[3] #number of channels 
 
-    maskA = np.expand_dims(maskA, axis = 2)
-    maskB = np.expand_dims(maskB, axis = 2)
+    maskA = np.expand_dims(maskA, axis = 3)
+    maskB = np.expand_dims(maskB, axis = 3)
 
     maskedA = data*maskA
     maskedB = data*maskB
@@ -83,29 +84,64 @@ def top_nv_sir(V, data, maskA, maskB, sir_threshold):
     # interference = np.matrix.H(V)*B*V #Nc x Nc
     # sir = signal/interference 
 
-    # for i, eigenvec in enumerate(np.transpose(V)):
+    # for i, eigenvec in enumerate(V.T):
     #     signal = np.matmul(np.matmul(np.transpose(eigenvec),A),eigenvec)
     #     interference = np.matmul(np.matmul(np.transpose(eigenvec),B),eigenvec)
     #     sir = np.abs(signal/interference)
     #     print(sir)
     #     if sir < sir_threshold:
-    #         return i-1
+    #         return i
     #     continue
-    # return nc-1
+    # return nc
 
     #vectorized version 
-
     signal = V.conj().T @ A @ V 
     interference = V.conj().T @ B @ V 
-    sirs = np.abs(signal/(interference + 1e-12)) # entry-wise division
-    sirs = np.diag(sirs) # diagonal of matrix is the vector of sirs
+    sirs = np.diag(np.abs(signal/(interference + 1e-12))) # diag has sirs
     for i, sir in enumerate(sirs):
         print(sir)
         if sir < sir_threshold:
-            return i-1
-    return nc - 1
+            return i
+    return nc
 
-    
+def top_nv_signal_retained(V, data, maskA, maskB, signal_threshold):
+    nc = data.shape[3] #number of channels 
+
+    maskA = np.expand_dims(maskA, axis = 3)
+    maskB = np.expand_dims(maskB, axis = 3)
+
+    maskedA = data*maskA
+
+    A = np.reshape(maskedA, (-1, nc)).conj().T @ np.reshape(maskedA, (-1, nc)) 
+
+    for i in range(1, nc+1):
+        V_retain = V[:, :i]
+        orth_proj = V_retain @ V_retain.conj().T
+        num = orth_proj @ A @ orth_proj
+        sig_retain = (norm(num, ord = 'fro') / norm (A, ord = 'fro'))*100
+        print(sig_retain)
+        if sig_retain >= signal_threshold:
+            return i 
+    return nc
+
+# def top_nv_inteference_suppression(V, data, maskB, inteference_threshold):
+#     nc = data.shape[2] #number of channels 
+
+#     maskB = np.expand_dims(maskB, axis = 2)
+
+#     maskedB = data*maskB
+
+#     B = np.reshape(maskedB, (-1, nc)).conj().T @ np.reshape(maskedB, (-1, nc)) 
+
+#     for i in range(1, nc+1):
+#         V_retain = V[:, :i]
+#         orth_proj = V_retain @ V_retain.conj().T
+#         num = orth_proj @ B @ orth_proj
+#         inter_sup = (norm(num, ord = 'fro') / norm (B, ord = 'fro'))*100
+#         print(inter_sup)
+#         if inter_sup >= inteference_threshold:
+#             return i 
+#     return nc
 
 def form_virtual_coil_data(V, data):
 
@@ -127,7 +163,8 @@ def form_virtual_coil_data(V, data):
     '''
 
     nv = V.shape[1] # number of top eigenvectors = number of virtual coils
-    new_data = np.zeros((data.shape[0], data.shape[1], nv, data.shape[3]), dtype = data.dtype)
+    new_data = np.zeros((data.shape[0], data.shape[1], nv, data.shape[2]), dtype = data.dtype)
+
 
     # for i, eigenvec in enumerate(np.transpose(V)):
     #     # data[x, y, :, z] = [d1, d2, ..., dNc]
@@ -141,7 +178,7 @@ def form_virtual_coil_data(V, data):
     # with tensordot, the result retains all axes of both input arrays,
     # except the axes that are summed over
 
-    new_data = np.tensordot(data, V, axes = ([2], [0]))
+    new_data = np.tensordot(data, V, axes = ([3], [0])) #lin combo of original coil data with lin combo weights as coef
     # (x, y, ch, z) * (ch, Nv) = (x, y, z, Nv)
-    new_data = np.moveaxis(new_data, -1, 2)
+    # new_data = np.moveaxis(new_data, -1, 2)
     return new_data
