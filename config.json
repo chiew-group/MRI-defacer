@@ -1,7 +1,7 @@
 {
-    "data": ,
-    "x_slice": ,
-    "y_slice": ,
-    "z_slice": ,
-
+    "data_path": "reduced_data.npy",
+    "x_slice": 60,
+    "y_slice": 60,
+    "z_slice": 60,
+    "sir_threshold": 100
 }
