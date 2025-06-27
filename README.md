@@ -6,20 +6,21 @@ Set up a Python environment
 
 ```
 Conda create -n MRIDEFACER python=3.13
-
 ```
 
 Download dependencies 
 
 ```
 pip install TotalSegmentator 
+pip install matplotlib
+pip install scipy
 ```
 
 Clone github repo
 
 ```
 git clone https://github.com/chiew-group/MRI-defacer.git
-
+cd MRI-defacer
 ```
 
 ## Citations 
