@@ -1,6 +1,8 @@
-import numpy as np 
+import json
 import matplotlib.pyplot as plt
+import numpy as np 
 import os
+
 from file_explorer import select_data
 from ROVir import rovir
 from ROVir import top_nv_sir
@@ -22,18 +24,22 @@ def rsos(data):
     
     return np.sqrt(np.sum(np.abs(data)**2, axis=3))
 
-data = np.load(select_data()) # select data from file explorer
-# print(data.shape)
+
+with open('config.json', 'r') as config_file:
+    inputs = json.load(config_file)
+
+data = np.load(inputs["data_path"]) 
+print("Data has been successfully loaded")
 data = np.moveaxis(data, -1, 2) # move axis to shape (x, y, z, ch)
 # data = np.transpose(data, (2, 1, 0, 3))
 # data = np.flip(data, axis = 1)
 
 # defining image slices
-x_slice = 60 # input("Enter x slice for sagittal view")
-y_slice = 60 # input("Enter y slice for coronal view")
-z_slice = 60 # input("Enter z slice for axial view"))
+x_slice = int(inputs["x_slice"])
+y_slice = int(inputs["y_slice"])
+z_slice = int(inputs["z_slice"])
 
-maskB = np.load(r"C:\Users\selin\OneDrive\Desktop\SRI\MRI defacer\TotalSegmentator\mask.npy") # define face mask
+maskB = np.load(r"TotalSegmentator\mask.npy") # define face mask
 maskA = np.ones((data.shape[0], data.shape[1], data.shape[2])) # define signal mask
 maskA = maskA - maskB
 
@@ -49,13 +55,11 @@ figure = plt.figure(figsize = (20, 20))
 for coil in range(all_coils.shape[3]):
     plt.subplot(8, 6, coil+1)
     plt.imshow(np.abs(image_all[x_slice, :, :, coil]), cmap='gray')
-    # roi = pch.Rectangle((z_start, y_start), z_end-z_start, y_end-y_start, linewidth=1, edgecolor='g', facecolor='none')
-    # plt.gca().add_patch(roi)
-    plt.imshow(maskB[x_slice, :, :], alpha = 0.8, cmap = 'Reds')
+    plt.imshow(maskB[x_slice, :, :], alpha = 0.4, cmap = 'Reds')
     plt.title(f'Virtual Coil {coil+1}')
 plt.show()
 
-sir_threshold = float(input('Input SIR threshold or press Enter for default') or 10)
+sir_threshold = float(inputs["sir_threshold"])
 i = top_nv_sir(V, image, maskA, maskB, sir_threshold) # finding top nv eigenvectors based on SIR
 print(f'The top nv eigenvectors contain the first {i} eigenvectors')
 V_retain = V[:,:i] # retain only the top nv eigenvectors 
@@ -87,8 +91,6 @@ plt.subplot(3,2,2)
 plt.title(f'Axial View z = {z_slice}')
 plt.imshow(image_axial, cmap='gray', vmin = 0, vmax = 0.3)
 # plt.imshow(maskB[:, :, z_slice], alpha = 0.4, cmap = 'Reds')
-# roi = pch.Rectangle((y_start, x_start), y_end-y_start, x_end-x_start, linewidth=1, edgecolor='g', facecolor='none')
-# plt.gca().add_patch(roi)
 
 plt.subplot(3,2,3)
 plt.title(f'Coronal K-space y = {y_slice}')
@@ -98,8 +100,6 @@ plt.subplot(3,2,4)
 plt.title(f'Coronal View y = {y_slice}')
 plt.imshow(image_cor, cmap='gray', vmin = 0, vmax = 0.3)
 # plt.imshow(maskB[:, y_slice, :], alpha = 0.4, cmap = 'Reds')
-# roi = pch.Rectangle((z_start, x_start), z_end-z_start, x_end-x_start, linewidth=1, edgecolor='g', facecolor='none')
-# plt.gca().add_patch(roi)
 
 plt.subplot(3,2,5) 
 plt.title(f'Sagittal K-space x = {x_slice}')
@@ -109,10 +109,8 @@ plt.subplot(3,2,6)
 plt.title(f'Sagittal View x = {x_slice}')
 plt.imshow(image_sag, cmap='gray', vmin = 0, vmax = 0.3)
 # plt.imshow(maskB[x_slice, :, :], alpha = 0.4, cmap = 'Reds')
-# roi = pch.Rectangle((z_start, y_start), z_end-z_start, y_end-y_start, linewidth=1, edgecolor='g', facecolor='none')
-# plt.gca().add_patch(roi)
 
 name = f'Reconstructed Image Axial {z_slice}, Coronal {y_slice}, Sagittal {x_slice}.png'
 path = os.path.join(r"C:\Users\selin\OneDrive\Desktop\SRI\MRI defacer", name)
 plt.savefig(path)
-plt.show() 
+plt.show()
