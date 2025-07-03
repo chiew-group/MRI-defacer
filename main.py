@@ -2,11 +2,15 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np 
 import os
+from scipy.ndimage import binary_dilation
+from scipy.ndimage import binary_erosion
 
-from file_explorer import select_data
 from ROVir import rovir
 from ROVir import top_nv_sir
+from ROVir import top_nv_signal_retained
 from ROVir import form_virtual_coil_data
+
+from skimage.exposure import equalize_adapthist
 
 
 def rsos(data):
@@ -39,9 +43,20 @@ x_slice = int(inputs["x_slice"])
 y_slice = int(inputs["y_slice"])
 z_slice = int(inputs["z_slice"])
 
-maskB = np.load(r"TotalSegmentator\mask.npy") # define face mask
+maskB = np.load(r"TotalSegmentator\mask2.npy") # define face mask
 maskA = np.ones((data.shape[0], data.shape[1], data.shape[2])) # define signal mask
 maskA = maskA - maskB
+# maskA = maskA - binary_dilation(maskB, iterations=2)
+# maskB = binary_erosion(maskB, iterations = 4)
+
+# x_start, x_end = 20, 120 
+# y_start, y_end = 90, 120
+# z_start, z_end = 30, 126
+# gap = 0
+# maskA = np.ones((data.shape[0], data.shape[1], data.shape[2])) # define signal mask
+# maskB = np.zeros((data.shape[0], data.shape[1], data.shape[2])) # define signal mask
+# maskA[x_start:x_end, y_start:y_end, z_start:z_end] = 0
+# maskB[x_start-gap:x_end+gap, y_start-gap:y_end+gap, z_start-gap:z_end+gap]= 1
 
 # fourier transform and shift data 
 image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
@@ -53,9 +68,10 @@ all_coils = form_virtual_coil_data(V, data)
 image_all = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(all_coils, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
 figure = plt.figure(figsize = (20, 20))
 for coil in range(all_coils.shape[3]):
-    plt.subplot(8, 6, coil+1)
+    plt.subplot(8, 7, coil+1)
     plt.imshow(np.abs(image_all[x_slice, :, :, coil]), cmap='gray')
     plt.imshow(maskB[x_slice, :, :], alpha = 0.4, cmap = 'Reds')
+    plt.imshow(maskA[x_slice, :, :], alpha = 0.4, cmap = 'Greens')
     plt.title(f'Virtual Coil {coil+1}')
 plt.show()
 
@@ -69,6 +85,8 @@ virtual_coil_data = form_virtual_coil_data(V_retain, data) # forming virtual coi
 # shift, compute fourier transform, shift over x, y, z axes
 image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(virtual_coil_data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
 image_rss = rsos(image) # find root sum of squares of image over the channel dimension
+image_rss = (image_rss - image_rss.min()) / (image_rss.max() - image_rss.min())
+image_rss = equalize_adapthist(image_rss, clip_limit = 0.04) # adaptive histogram equalization
 kspace_rss = rsos(virtual_coil_data) # compute rsos of k-space data
 
 # getting the axial, coronal, and sagittal kspace slices
@@ -89,8 +107,8 @@ plt.imshow(np.log(np.abs(kspace_axial)+1e-9), cmap='gray')
 
 plt.subplot(3,2,2)
 plt.title(f'Axial View z = {z_slice}')
-plt.imshow(image_axial, cmap='gray', vmin = 0, vmax = 0.3)
-# plt.imshow(maskB[:, :, z_slice], alpha = 0.4, cmap = 'Reds')
+plt.imshow(image_axial, cmap='gray')
+plt.imshow(maskB[:, :, z_slice], alpha = 0.3, cmap = 'Reds')
 
 plt.subplot(3,2,3)
 plt.title(f'Coronal K-space y = {y_slice}')
@@ -98,8 +116,8 @@ plt.imshow(np.log(np.abs(kspace_cor)+1e-9), cmap='gray')
 
 plt.subplot(3,2,4)
 plt.title(f'Coronal View y = {y_slice}')
-plt.imshow(image_cor, cmap='gray', vmin = 0, vmax = 0.3)
-# plt.imshow(maskB[:, y_slice, :], alpha = 0.4, cmap = 'Reds')
+plt.imshow(image_cor, cmap='gray')
+plt.imshow(maskB[:, y_slice, :], alpha = 0.3, cmap = 'Reds')
 
 plt.subplot(3,2,5) 
 plt.title(f'Sagittal K-space x = {x_slice}')
@@ -107,10 +125,10 @@ plt.imshow(np.log(np.abs(kspace_sag)+1e-9), cmap='gray')
 
 plt.subplot(3,2,6)
 plt.title(f'Sagittal View x = {x_slice}')
-plt.imshow(image_sag, cmap='gray', vmin = 0, vmax = 0.3)
-# plt.imshow(maskB[x_slice, :, :], alpha = 0.4, cmap = 'Reds')
+plt.imshow(image_sag, cmap='gray')
+plt.imshow(maskB[x_slice, :, :], alpha = 0.3, cmap = 'Reds')
 
-name = f'Reconstructed Image Axial {z_slice}, Coronal {y_slice}, Sagittal {x_slice}.png'
-path = os.path.join(r"C:\Users\selin\OneDrive\Desktop\SRI\MRI defacer", name)
-plt.savefig(path)
+# name = f'Reconstructed Image Axial {z_slice}, Coronal {y_slice}, Sagittal {x_slice}.png'
+# path = os.path.join(r"C:\Users\selin\OneDrive\Desktop\SRI\MRI defacer", name)
+# plt.savefig(path)
 plt.show()
