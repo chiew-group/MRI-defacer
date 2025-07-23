@@ -1,9 +1,18 @@
 import numpy as np
-from numpy.linalg import qr
+from scipy.linalg import orth
 from scipy.linalg import eigh
 from scipy.linalg import norm
+import matplotlib.pyplot as plt
+import kneed
+from scipy.signal import savgol_filter
 
-def rovir(data, maskA, maskB):
+
+#notes 
+    # orthonormalize the eigenvectors in rovir function 
+    # define mask such that when totalseg gives you face mask, take entire block as mask
+    # get rid of all orthonormalization 
+
+def rovir(nc, A, B):
     '''
     Finds the eigenvectors from the generalized eigenvalue problem 
     Av = DBv. The eigenvectors are ranked from the largest to the
@@ -24,28 +33,46 @@ def rovir(data, maskA, maskB):
                         eigenvalue problem Av = DBv 
 
     '''
-    # check if eigenvectors are the same use matlab 
-    nc = data.shape[3] #number of channels 
-
-    maskA = np.expand_dims(maskA, axis = 3) # to ensure mask has same dimensions as data
-    maskB = np.expand_dims(maskB, axis = 3)
-
-    maskedA = data*maskA # applying masks by entry-wise mult
-    maskedB = data*maskB 
-
-    A = np.reshape(maskedA, (-1, nc)).conj().T @ np.reshape(maskedA, (-1, nc)) # Nc x Nc
-    B = np.reshape(maskedB, (-1, nc)).conj().T @ np.reshape(maskedB, (-1, nc))
-
     D, V = eigh(A, B) # compute a vector eigenvalues D and a matrix of eigenvectors V as columns
     # V[:, i] is the eigenvector corresponding to D[i]
+
+    #find unit norm 
+    for i in range(nc):
+        norm = np.linalg.norm(V[:, i])
+        V[: ,i] = V[: ,i] / norm
+
+    # print(V)
 
     i = np.argsort(D)[::-1] # get indices that would sort eigenvalues in descending order
 
     V = V[:, i] # rank eigenvectors by sorted eigenvalues
+    # take each column of V unit normalize the eigenvectors to 1 
 
     return V
 
-def top_nv_sir(V, data, maskA, maskB, sir_threshold):
+def elbow_sir(nc, sirs_vec):
+    '''
+    Find the elbow of the SIR exponential decay curve to set SIR threshold. 
+
+    Parameters
+    ----------
+        nc -> int: the number of coils 
+        sirs_vec -> np.ndarray: a 1 x Nc array of SIR values for each virtual coil
+
+    '''
+
+    # kneedle = kneed.KneeLocator(np.arange(0,nc), sirs_vec, S = 0.5, curve = "convex", direction = "increasing" ) #works for og mask
+    kneedle = kneed.KneeLocator(np.arange(0,nc), sirs_vec, S = 0.7, curve = "convex", direction = "increasing" )
+
+    print(kneedle.elbow, sirs_vec[int(kneedle.elbow)])
+    return (kneedle.elbow, sirs_vec[int(kneedle.elbow)])
+
+    # kneedle = kneed.KneeLocator(np.arange(0,nc), sirs_vec, S = 10, curve = "concave", direction = "increasing" )
+    # print(kneedle.elbow + 1, sirs_vec[int(kneedle.elbow)])
+    # return (kneedle.elbow + 1, sirs_vec[int(kneedle.elbow)])
+
+
+def top_nv_sir(V, nc, A, B, sir_threshold):
     '''
     Find the number of top Nv < Nc eigenvectors for the linear combination weight. 
     Calculated by first find the signal interference ratio for each coil, 
@@ -66,50 +93,106 @@ def top_nv_sir(V, data, maskA, maskB, sir_threshold):
         Nv -> int: the index of the last top Nv coil
     
     '''
-    nc = data.shape[3] #number of channels 
+    # print((A @ V)[:,0])
+    # print((A @ V[:,0]))
 
-    maskA = np.expand_dims(maskA, axis = 3)
-    maskB = np.expand_dims(maskB, axis = 3)
+    signal = np.real(np.diag(V.conj().T @ A @ V))
+    # sig1 = V[:, 0].conj().T @ A @ V[:, 0]
+    # print(sig1)
+    # print(np.diag(signal))
 
-    maskedA = data*maskA
-    maskedB = data*maskB
+    interference = np.real(np.diag(V.conj().T @ B @ V))
+    # print(B)
+    print("coil interference:", np.diag(interference))
 
-    A = np.reshape(maskedA, (-1, nc)).conj().T @ np.reshape(maskedA, (-1, nc)) 
-    B = np.reshape(maskedB, (-1, nc)).conj().T @ np.reshape(maskedB, (-1, nc)) 
-
-    signal = V.conj().T @ A @ V 
-    interference = V.conj().T @ B @ V 
-    sirs = np.diag(np.abs(signal/(interference + 1e-12))) 
+    # sirs = np.diag(np.abs(signal/(interference + 1e-12))) 
+    sirs = signal/(interference + 1e-12)
+    print("SIR values are:", sirs)
+    coil, sir_threshold = elbow_sir(nc, interference)
     
-    if sirs[0] < sir_threshold: 
-        print('No coil meets the SIR threshold')
-        exit()
+    # tot_sig = []
+    # tot_int = []
+    # for i in range(1, 1+nc):
+    #     tot_sig.append(np.sum(signal[:i]))
+    #     tot_int.append(np.sum(interference[:i]))
 
-    for i, sir in enumerate(sirs):
-        print(sir)
-        if sir < sir_threshold:
-            return i
-    return nc
+    xaxis = np.arange(1, nc+1)
 
-def top_nv_signal_retained(V, data, maskA, maskB, signal_threshold):
-    nc = data.shape[3] #number of channels 
+    plt.scatter(xaxis, sirs, c = "blue")
+    plt.axvline(x=coil, linestyle = "--", label = "Threshold Elbow")
+    plt.title("SIR of Each Virtual Coil")
+    plt.xlabel("jth Coil")
+    plt.legend()
+    plt.show()
 
-    maskA = np.expand_dims(maskA, axis = 3)
-    maskB = np.expand_dims(maskB, axis = 3)
+    plt.scatter(xaxis, signal, c = "green")
+    plt.axvline(x=coil, linestyle = "--", label = "Threshold Elbow")
+    plt.title("Signal Energy of Each Virtual Coil")
+    plt.xlabel("jth Coil")
+    plt.legend()
+    plt.show()
 
-    maskedA = data*maskA
+    plt.scatter(xaxis, interference, c = "red")
+    plt.axvline(x=coil, linestyle = "--", label = "Threshold Elbow")
+    plt.title("Interference Energy of Each Virtual Coil")
+    plt.xlabel("jth Coil")
+    plt.legend()
+    plt.show()
 
-    A = np.reshape(maskedA, (-1, nc)).conj().T @ np.reshape(maskedA, (-1, nc)) 
+    return coil + 1
+
+    # sir_threshold = 1
+
+    # if sirs[0] < sir_threshold: 
+    #     print('No coil meets the SIR threshold')
+    #     exit()
+
+    # for i, sir in enumerate(sirs):
+    #     print(sir)
+    #     if sir < sir_threshold:
+    #         return i
+    # return nc
+
+def top_nv_signal_retained(V, nc, A, B, signal_threshold):
+
+    retain_sig = []
+
+    # print(V)
 
     for i in range(1, nc+1):
-        V_retain, _ = qr(V[:, :i])
+        V_retain = V[:, :i]
+        #  V_retain = orth(V[:, :i])
         orth_proj = V_retain @ V_retain.conj().T
         num = orth_proj @ A @ orth_proj
         sig_retain = (norm(num, ord = 'fro') / norm (A, ord = 'fro'))*100
+        retain_sig.append(sig_retain)
         print(sig_retain)
-        if sig_retain >= signal_threshold:
-            return i 
-    return nc
+    #     if sig_retain >= signal_threshold:
+    #         return i 
+    # return nc
+
+    # coil, threshold = elbow_sir(nc, retain_sig)
+
+    retain_inter = []
+    for i in range(1, nc+1):
+        V_retain = V[:, :i]
+        #  V_retain = orth(V[:, :i])
+        orth_proj = V_retain @ V_retain.conj().T
+        num = orth_proj @ B @ orth_proj
+        inter_retain = (norm(num, ord = 'fro') / norm (B, ord = 'fro'))*100
+        retain_inter.append(inter_retain)
+        print(inter_retain)
+
+    plt.scatter(np.arange(1, nc+1), np.array(retain_sig), label = "Signal Retained", c= "green")
+    plt.scatter(np.arange(1, nc+1), np.array(retain_inter), label = "Interference Retained", c= "red")
+    # plt.axvline(x=coil, color='r', linestyle='--', label='Vertical Line')
+    plt.ylabel("Percentage Retained %"); plt.xlabel("Total Channels Retained N")
+    plt.legend()
+    plt.title("Cumulative Percentage Signal/Interference vs Coils Retained")
+    plt.show()
+
+    # return coil+1
+
 
 def form_virtual_coil_data(V, data):
 
@@ -137,3 +220,6 @@ def form_virtual_coil_data(V, data):
     # lin combo of original coil data with lin combo weights as coef
     # (x, y, ch, z) * (ch, Nv) = (x, y, z, Nv)
     return new_data
+
+
+#for gap, loop while signla of largest coil smaller than 95%. start from gap =0, increase until condition met
