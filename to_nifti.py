@@ -5,7 +5,21 @@ GREEN = '\033[92m'
 RESET = '\033[0m'
 
 def niftify(image, a11, a22, a33, name):
+
+    '''
+    To convert numpy files into nifti files for image visualization tools and segmentation tools. 
+
+    Parameters
+    ----------
+        image -> np.ndarray: the image space data with shape (x, y, z, ch)
+        a11 -> float: voxel spacing along x axis
+        a22 -> float: voxel spacing along y axis
+        a33 -> float: voxel spacing along z axis
+        name -> str: the ID of the nifti to be saved  
+
+    '''
     
+    # set intensity range to 0-255
     image = (image - image.min()) / (image.max() - image.min()) * 255
 
     # converting numpy data to nifti file 
@@ -18,6 +32,7 @@ def niftify(image, a11, a22, a33, name):
     nifti_img = nib.Nifti1Image(image.astype(np.uint8), affine)
     print(nifti_img.affine)
 
+    # saving the nifti file 
     fp = f'results/{name}.nii'
     nib.save(nifti_img, fp)
     print(GREEN + "Nifti file successfully saved" + RESET)
