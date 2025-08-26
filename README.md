@@ -1,5 +1,19 @@
 # MRI Defacer
-MRI Defacer is a tool for defacing raw MRI data. Instead of defacing reconstructed images which permanently alters the raw k-space data, MRI Defacer defaces in k-space to preserve the raw data. This tool employs TotalSegmentator's face_mr task [2] to automatically generate a mask for the brain and facial regions, then uses region-optmized virtual coils (ROVir) [1] to deface the MRI data in k-space. The benefit of this pipeline is that we act on the coil dimension, deleting only coils with high face region signal, thus preserving raw k-space data. 
+![banner](assets/banner.png)
+MRI Defacer is a tool for defacing raw 3D MRI brain data. Instead of defacing reconstructed images which permanently alters the raw k-space data, MRI Defacer defaces in k-space to preserve the raw data. This defaced data can then be used and shared for reconstruction research, where having raw data and protecting the privacy of participants is important.
+
+### Brief Pipeline Overview
+We use the region-optmized virtual coils (ROVir) [1] framework to locally supress facial signal in k-space. Here are the steps we take: <br/>
+
+(1) We make an initial reconstruction to define the brain and face regions
+
+(2) We employ TotalSegmentator's face_mr and total_mr tasks [2] to automatically generate a mask for the face and brain regions. We manipulate these masks to simplify them and create gaps to optimize it for the ROVir framework
+
+(3) We define a ROVir transform based on these masks. This transform mixes the original measurement coils to form virtual coils with signal concentrated in either the brain or face regions
+
+(4) We retain only the top virtual coils and discard those that have high face region signal
+
+The benefit of this pipeline is that we act on the coil dimension, deleting only coils with high face region signal, thus preserving raw k-space data. 
 
 ## Installation and Usage
 Set up a Python environment for MRI Defacer
@@ -71,18 +85,32 @@ This parameters specifies the amount times the face mask is shrunk to create a g
 #### 4. x_y_z_channel | default = [0, 1, 2, 3]
 If the current shape of the data is not the required data.shape = (x, y, z, ch), the user can specify how the current data shape maps to the required data shape using a list. The first element specifies the current index of the x-axis in data.shape, the second element specifies the current index of the y-axis in data.shape, the third element specifies the current index of the z-axis in data.shape, and the fourth element specifies the current index of the channel dimension in data.shape. For example, if x_y_z_channel = [2, 0, 1, 3] is specified, it means the current axis 0 corresponds to y, the current axis 1 corresponds to z, the current axis 2 corresponds to x, and the current axis 3 corresponds to channels (i.e. data.shape = (y, z, x, ch)).  
 
-## Example Usage
+## Example Results
+
+This example uses a fully sampled 12-channel dataset from Calgary Campinas [3], which we named example.npy, and our default parameters in config.json. Our default heuristics chose to retain 9 virtual coils, resulting in a brain retention of 64% and face retention of 1.5%. 
+
+![result image](assets/results.png)
+Here are what the metrics look like for the virtual coils 
+
+Here are what the virtual coils look like 
+
+Here is a comparison 
 
 ## More Options for Developers
 what functions can be changed 
 show options for visualization 
 
-## Coil Thresholding Methods
+You may uncomment line 199 in main.py to see a comparison
+```
+compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice) # visualize comparison between different # of coils retained
+```
 
-we defined thresholdign to be max 2% face retention, which worked ofr our datasets. you may conisder using the other methods that are listed below by changing the options in the config file. 
-
-## info for future developer in separate read me 
-## anticipate questions 
+You may uncomment line 200 in main.py to see all virtual coils 
+```
+show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual coils
+```
+Here is a more detailed description of our pipeline flow: 
+(1)
 
 ## Troubleshooting 
 1. Wrong affine or orientation: check direction, voxel spacing, segmentation toool  may not be doing that well 
@@ -96,3 +124,5 @@ spatial regions using sensor- domain beamforming. Magn Reson Med. 2021;86:197–
 https://doi.org/10.1002/mrm.28706 
 
 [2] Wasserthal, J., Breit, H.-C., Meyer, M.T., Pradella, M., Hinck, D., Sauter, A.W., Heye, T., Boll, D., Cyriac, J., Yang, S., Bach, M., Segeroth, M., 2023. TotalSegmentator: Robust Segmentation of 104 Anatomic Structures in CT Images. Radiology: Artificial Intelligence. https://doi.org/10.1148/ryai.230024
+
+[3] R. Souza et al., “An open, multi-vendor, multi-field-strength brain MR dataset and analysis of publicly available skull stripping methods agreement,” NeuroImage, vol. 170, pp. 482–494, Apr. 2018, doi: https://doi.org/10.1016/j.neuroimage.2017.08.021.
