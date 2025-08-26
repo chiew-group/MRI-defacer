@@ -4,197 +4,168 @@ from scipy.linalg import eigh
 from scipy.linalg import norm
 import matplotlib.pyplot as plt
 import kneed
-from scipy.signal import savgol_filter
 
-
-#notes 
-    # orthonormalize the eigenvectors in rovir function 
-    # define mask such that when totalseg gives you face mask, take entire block as mask
-    # get rid of all orthonormalization 
-
-def rovir(nc, A, B):
+def rovir(nc, brain_covar, face_covar):
     '''
     Finds the eigenvectors from the generalized eigenvalue problem 
-    Av = DBv. The eigenvectors are ranked from the largest to the
+    Av = λBv. The eigenvectors are ranked from the largest to the
     smallest eigenvalue, where the largest eigenvalue corresponds
-    to the largest SIR. This is the ROVir algorithm for increasing
-    signal energy from the ROI and decreasing intereference from
-    the uninteresting region.
+    to the largest signal to interference ratio (sir). This is the 
+    ROVir [1] algorithm for localized signal supression.
 
     Parameters
     ----------
-        data -> np.ndarray: a 4D array of MRI data, shape (x, y, ch, z)
-        maskA -> np.ndarray: an array for signal region
-        maskB -> np.ndarray: an array for interference region
+        nc -> int: the number of original eigenvectors/coils
+        brain_covar -> np.ndarray: covariance matrix corresponding to brain region 
+        face_covar -> np.ndarray: covariance matrix corresponding to face region 
 
     Returns
     ----------
-        V -> np.ndarray: an Nc x Nc array, with right eigenvectors of the 
-                        eigenvalue problem Av = DBv 
+        eigvec -> np.ndarray: an Nc x Nc array, where columns are eigenvectors
+        of the eigenvalue problem Av = λBv sorted by largest eigenvalue to smallest.
 
     '''
-    D, V = eigh(A, B) # compute a vector eigenvalues D and a matrix of eigenvectors V as columns
-    # V[:, i] is the eigenvector corresponding to D[i]
+    # solve generalized eigenvalue problem to obtain eigenvalues and eigenvectors 
+    # eigval is a vector of eigenvalues, eigvec is a matrix of eigenvectors as columns 
+    # eigvec[:, i] is the ith eigenvector corresponding to the eigenvalue eigval[i]
+    eigval, eigvec = eigh(brain_covar, face_covar) 
 
-    #find unit norm 
+    # find unit norm 
     for i in range(nc):
-        norm = np.linalg.norm(V[:, i])
-        V[: ,i] = V[: ,i] / norm
+        norm = np.linalg.norm(eigvec[:, i])
+        eigvec[:, i] = eigvec[:, i] / norm
 
-    # print(V)
+    sorter = np.argsort(eigval)[::-1] # get indices that would sort eigenvalues in descending order
+    eigvec = eigvec[:, sorter] # rank eigenvectors by sorted eigenvalues
 
-    i = np.argsort(D)[::-1] # get indices that would sort eigenvalues in descending order
+    return eigvec
 
-    V = V[:, i] # rank eigenvectors by sorted eigenvalues
-    # take each column of V unit normalize the eigenvectors to 1 
-
-    return V
-
-def elbow_sir(nc, sirs_vec):
+def elbow_finder(nc, metric, sensitivity, curve_type, curve_direction):
     '''
-    Find the elbow of the SIR exponential decay curve to set SIR threshold. 
+    Find the elbow of the curve of a certain metric to define
+    the top number of virtual cols to retain.
 
     Parameters
     ----------
         nc -> int: the number of coils 
-        sirs_vec -> np.ndarray: a 1 x Nc array of SIR values for each virtual coil
+        metric -> np.ndarray: a 1 x Nc array of values by which the thresholding is based on
+        sensitivity -> float: to specify the aggressiveness of elbow recognition for KneeLocator
+        curve_type -> str: to specify the type of curve for KneeLocator
+        curve_direction -> str: to specify the end behaviour of data as coils increase for KneeLocator
+
+    Return
+    ----------
+        kneedle.elbow -> int: the coil number at which the elbow was detected 
 
     '''
+    kneedle = kneed.KneeLocator(np.arange(0,nc), metric, S = sensitivity, curve = curve_type, direction = curve_direction)
+    print(kneedle.elbow, metric[int(kneedle.elbow)])
+    return kneedle.elbow
 
-    # kneedle = kneed.KneeLocator(np.arange(0,nc), sirs_vec, S = 0.5, curve = "convex", direction = "increasing" ) #works for og mask
-    kneedle = kneed.KneeLocator(np.arange(0,nc), sirs_vec, S = 0.7, curve = "convex", direction = "increasing" )
-
-    print(kneedle.elbow, sirs_vec[int(kneedle.elbow)])
-    return (kneedle.elbow, sirs_vec[int(kneedle.elbow)])
-
-    # kneedle = kneed.KneeLocator(np.arange(0,nc), sirs_vec, S = 10, curve = "concave", direction = "increasing" )
-    # print(kneedle.elbow + 1, sirs_vec[int(kneedle.elbow)])
-    # return (kneedle.elbow + 1, sirs_vec[int(kneedle.elbow)])
-
-
-def top_nv_sir(V, nc, A, B, sir_threshold):
+def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold):
     '''
-    Find the number of top Nv < Nc eigenvectors for the linear combination weight. 
-    Calculated by first find the signal interference ratio for each coil, 
-    then only counting those with a SIR > 1, indicating the signal coming 
-    from that coil is greater than the interference. Specfically, find
-    signal = w'Aw, interference = w'Bw energy, sir = signal/interference.
+    Selects the top eigenvectors based on SIR, coil signal energy, coil interference energy, 
+    ROI signal retention, or interference signal retention. 
 
     Parameters
     ----------
-        V -> np.ndarray: an Nc x Nc array, with right eigenvectors of Av = DBv 
-        data -> np.ndarray: a 4D array of MRI data, shape (x, y, ch, z)
-        maskA -> np.ndarray: an m x n array for signal region
-        maskB -> np.ndarray: an m x n array for interference region
-        sir_threshold -> int: threshold sir for top Nv coils
-    
-    Returns
+        V -> np.ndarray: an nc x nc array, whose columns are sorted eigenvectors 
+        nc -> int: the number of original eigenvectors 
+        brain_covar -> np.ndarray: convariance matrix corresponding to brain region
+        face_covar -> np.ndarray: covariance matrix corresponding to face region 
+        method -> str: the user-selected coil thresholding method 
+        threshold -> int: the manual threshold for selecting top coils; if None, 
+        then threshold is automatically determined using elbow_finder
+
+    Return
     ----------
-        Nv -> int: the index of the last top Nv coil
-    
+        int: the number of top coils to retain
+
     '''
-    # print((A @ V)[:,0])
-    # print((A @ V[:,0]))
+    brain_signal = np.real(np.diag(eigenvec.conj().T @ brain_covar @ eigenvec)) # calculate signal from brain region
+    face_signal = np.real(np.diag(eigenvec.conj().T @ face_covar @ eigenvec)) # calculate signal form face region
+    sirs = brain_signal/(face_signal + 1e-12) # calculate brain signal to face signal ratio (signal to interference ratio)
 
-    signal = np.real(np.diag(V.conj().T @ A @ V))
-    # sig1 = V[:, 0].conj().T @ A @ V[:, 0]
-    # print(sig1)
-    # print(np.diag(signal))
+    brain_retain = []
+    face_retain = []
 
-    interference = np.real(np.diag(V.conj().T @ B @ V))
-    # print(B)
-    print("coil interference:", np.diag(interference))
+    for i in range(1, nc+1):
+        eigenvec_retain = orth(eigenvec[:, :i]) # retain i top eigenvectors
+        orth_proj = eigenvec_retain @ eigenvec_retain.conj().T # orthogonal projection matrix
+        # calculate current percentage signal of the original image retained from the brain and face regions
+        cur_brain_retain = (norm((orth_proj @ brain_covar @ orth_proj), ord = 'fro') / norm (brain_covar, ord = 'fro'))*100 
+        cur_face_retain = (norm((orth_proj @ face_covar @ orth_proj), ord = 'fro') / norm (face_covar, ord = 'fro'))*100
+        brain_retain.append(cur_brain_retain) # append to list of brain signal percentages in order of least top virtual coils retained
+        face_retain.append(cur_face_retain) # append to list of face signal percentages in order of least top virtual coils retained
 
-    # sirs = np.diag(np.abs(signal/(interference + 1e-12))) 
-    sirs = signal/(interference + 1e-12)
-    print("SIR values are:", sirs)
-    coil, sir_threshold = elbow_sir(nc, interference)
-    
-    # tot_sig = []
-    # tot_int = []
-    # for i in range(1, 1+nc):
-    #     tot_sig.append(np.sum(signal[:i]))
-    #     tot_int.append(np.sum(interference[:i]))
+        # print(f'retaining {i} coils retains {cur_brain_retain}% brain and {cur_face_retain}% face)
+
+    if method == "SIR": # if the signal to interference ratio (brain to face) is chosen as metric
+        if threshold: # if given a minimum SIR threshold to meet
+            i = -1 
+            while i+1 <len(sirs) and sirs[i+1] < threshold: 
+                i+=1 # retain coils until the current coil meets the minimum SIR
+            coil = i + 1 # want to retain the coil that takes us just over min SIR
+        else: # if null, use automatic elbow selection to threshold based on SIR curve
+            coil = elbow_finder(nc, sirs, 0.1, "convex", "decreasing")
+
+    elif method == "brain_retained": # if the cumulative brain signal retention is chosen as metric
+        if threshold: # if given a minimum brain retention percentage to meet
+            i = -1
+            while i+1 < len(brain_retain) and brain_retain[i+1] < float(threshold):
+                i+=1 # retain coils until the cumulative minimum brain signal is met
+            coil = i + 1  # want to retain the coil that takes us just over min brain retention
+        else: # if null, use automatic elbow selection to threshold based on brain retention curve
+            coil = elbow_finder(nc, brain_retain, 5, "concave", "increasing")
+
+    elif method == "face_retained": # if the cumulative face signal retention is chosen as metric
+        if threshold: # if given a maximum face retention percentage limit
+            i = -1 
+            while i+1 < len(face_retain) and face_retain[i+1] < threshold:
+                i+=1 # retain coils until the cumulative max face signal is met
+            coil = i # don't want to retain the coil that takes us over the limit
+        else: # if null, use automatic elbow selection to threshold based on face retention curve
+            coil = elbow_finder(nc, face_retain, 0.1, "convex", "increasing")
+    else:
+        print("Invalid threholding method. Do you mean 'SIR', 'signal', 'interference', 'signal_retained', or 'interference_retained'?")
+        exit()
 
     xaxis = np.arange(1, nc+1)
 
+    # visualize metrics as scatterplots
+    plt.subplot(2,2,1)
     plt.scatter(xaxis, sirs, c = "blue")
-    plt.axvline(x=coil, linestyle = "--", label = "Threshold Elbow")
+    plt.axvline(x=coil, linestyle = "--", label = "Threshold")
     plt.title("SIR of Each Virtual Coil")
     plt.xlabel("jth Coil")
     plt.legend()
-    plt.show()
 
-    plt.scatter(xaxis, signal, c = "green")
-    plt.axvline(x=coil, linestyle = "--", label = "Threshold Elbow")
+    plt.subplot(2,2,2)
+    plt.scatter(xaxis, brain_signal, c = "green")
+    plt.axvline(x=coil, linestyle = "--", label = "Threshold")
     plt.title("Signal Energy of Each Virtual Coil")
     plt.xlabel("jth Coil")
     plt.legend()
-    plt.show()
 
-    plt.scatter(xaxis, interference, c = "red")
-    plt.axvline(x=coil, linestyle = "--", label = "Threshold Elbow")
+    plt.subplot(2,2,3)
+    plt.scatter(xaxis, face_signal, c = "red")
+    plt.axvline(x=coil, linestyle = "--", label = "Threshold")
     plt.title("Interference Energy of Each Virtual Coil")
     plt.xlabel("jth Coil")
     plt.legend()
-    plt.show()
-
-    return coil + 1
-
-    # sir_threshold = 1
-
-    # if sirs[0] < sir_threshold: 
-    #     print('No coil meets the SIR threshold')
-    #     exit()
-
-    # for i, sir in enumerate(sirs):
-    #     print(sir)
-    #     if sir < sir_threshold:
-    #         return i
-    # return nc
-
-def top_nv_signal_retained(V, nc, A, B, signal_threshold):
-
-    retain_sig = []
-
-    # print(V)
-
-    for i in range(1, nc+1):
-        V_retain = V[:, :i]
-        #  V_retain = orth(V[:, :i])
-        orth_proj = V_retain @ V_retain.conj().T
-        num = orth_proj @ A @ orth_proj
-        sig_retain = (norm(num, ord = 'fro') / norm (A, ord = 'fro'))*100
-        retain_sig.append(sig_retain)
-        print(sig_retain)
-    #     if sig_retain >= signal_threshold:
-    #         return i 
-    # return nc
-
-    # coil, threshold = elbow_sir(nc, retain_sig)
-
-    retain_inter = []
-    for i in range(1, nc+1):
-        V_retain = V[:, :i]
-        #  V_retain = orth(V[:, :i])
-        orth_proj = V_retain @ V_retain.conj().T
-        num = orth_proj @ B @ orth_proj
-        inter_retain = (norm(num, ord = 'fro') / norm (B, ord = 'fro'))*100
-        retain_inter.append(inter_retain)
-        print(inter_retain)
-
-    plt.scatter(np.arange(1, nc+1), np.array(retain_sig), label = "Signal Retained", c= "green")
-    plt.scatter(np.arange(1, nc+1), np.array(retain_inter), label = "Interference Retained", c= "red")
-    # plt.axvline(x=coil, color='r', linestyle='--', label='Vertical Line')
-    plt.ylabel("Percentage Retained %"); plt.xlabel("Total Channels Retained N")
+    
+    plt.subplot(2,2,4)
+    plt.scatter(np.arange(1, nc+1), np.array(brain_retain), label = "Brain Retained", c= "green")
+    plt.scatter(np.arange(1, nc+1), np.array(face_retain), label = "Face Retained", c= "red")
+    plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
+    plt.ylabel("Percentage Retained (%)"); plt.xlabel("Total Channels Retained (N)")
     plt.legend()
-    plt.title("Cumulative Percentage Signal/Interference vs Coils Retained")
+    plt.title("Brain/Face Signal Retention vs Virtual Coils Retained")
     plt.show()
 
-    # return coil+1
+    return coil + 1 # plus 1 because slicing is not inclusive, i.e if eigenvec[:,:coil], coil is not included
 
-
-def form_virtual_coil_data(V, data):
+def form_virtual_coil_data(top_eigenvec, data):
 
     '''
     Forms the virtual coil data by computing the linear combination of
@@ -204,22 +175,20 @@ def form_virtual_coil_data(V, data):
     
     Parameters
     ----------
-        V -> np.ndarray: an Nc x Nv array, with columns as the top Nv eigenvectors
-        data -> np.ndarray: a 4D array of MRI data, shape (x, y, ch, z)
+        top_eigenvec -> np.ndarray: an nc x nv array, with columns as the top nv eigenvectors
+        data -> np.ndarray: the orignal raw k-space data, shape (x, y, z, ch)
 
 
     Returns 
     ----------
-        new_data -> np.ndarray: a 4D array of virtual coil data, shape (x, y, Nv, z)
+        new_data -> np.ndarray: a 4D array of virtual coil data, shape (x, y, z, nv)
     '''
 
-    nv = V.shape[1] # number of top eigenvectors = number of virtual coils
+    nv = top_eigenvec.shape[1] # number of top eigenvectors = number of virtual coils
     new_data = np.zeros((data.shape[0], data.shape[1], nv, data.shape[2]), dtype = data.dtype)
 
-    new_data = np.tensordot(data, V, axes = ([3], [0])) 
+    new_data = np.tensordot(data, top_eigenvec, axes = ([3], [0])) 
     # lin combo of original coil data with lin combo weights as coef
-    # (x, y, ch, z) * (ch, Nv) = (x, y, z, Nv)
+    # (x, y, ch, z) * (ch, nv) = (x, y, z, nv)
     return new_data
 
-
-#for gap, loop while signla of largest coil smaller than 95%. start from gap =0, increase until condition met
