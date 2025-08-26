@@ -47,7 +47,7 @@ def display_defaced(og_image_rsos, defaced_image_rsos, x_slice, y_slice, z_slice
     maskB_sag = np.rot90(maskB[x_slice, :, :])
 
     plt.subplot(3,3,1)
-    plt.title(f'Original')
+    plt.title(f'Original Images')
     plt.axis('off')
     plt.imshow(og_ax, cmap='gray')
     plt.subplot(3,3,4)
@@ -59,9 +59,9 @@ def display_defaced(og_image_rsos, defaced_image_rsos, x_slice, y_slice, z_slice
 
     plt.subplot(3,3,2)
     plt.axis('off')
-    plt.title(f'Defaced with Mask1')
+    plt.title(f'Defaced Images')
     plt.imshow(defaced_ax, cmap='gray')
-    plt.text(defaced_image_rsos[x_slice, :, :].shape[0]//2, 5, f'Brain: {round(brain_retain, 2)}% \n Face: {round(face_retain, 2)}%', color="white", fontsize=8, ha='center', va='top')
+    # plt.text(defaced_image_rsos[x_slice, :, :].shape[0]//2, 5, f'Brain: {round(brain_retain, 2)}% \n Face: {round(face_retain, 2)}%', color="white", fontsize=8, ha='center', va='top')
     plt.subplot(3,3,5)
     plt.axis('off')
     plt.imshow(defaced_cor, cmap='gray') 
@@ -71,7 +71,7 @@ def display_defaced(og_image_rsos, defaced_image_rsos, x_slice, y_slice, z_slice
 
     plt.subplot(3,3,3)
     plt.axis('off')
-    plt.title(f'Mask1')
+    plt.title(f'Brain/Face Masks')
     plt.imshow(defaced_ax, cmap='gray')
     plt.imshow(maskB_ax, alpha = 0.3, cmap = 'Reds')
     plt.imshow(maskA_ax, alpha = 0.3, cmap = 'Greens')
