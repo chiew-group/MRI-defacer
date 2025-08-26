@@ -193,7 +193,9 @@ if __name__ == "__main__":
     eigenvec = rovir(nc, brain_covar, face_covar) # finding the eigenvectors for (brain_covar)v = λ(face_covar)v
     print(GREEN + "Eigenvectors computed" + RESET)
 
-
+    import matplotlib
+    matplotlib.use('Qt5Agg')
+    
     # compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice) # visualize comparison between different # of coils retained
     # show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual coils
 
@@ -222,8 +224,8 @@ if __name__ == "__main__":
     # print(virtual_coil_data.shape)
     print(GREEN + f'Virtual coils successfully formed' + RESET)
 
-    # # save final defaced raw data
-    # np.save(f'results/defaced/defaced_{dataID}.npy', virtual_coil_data)
+    # save final defaced raw data
+    np.save(f'results/defaced/defaced_{dataID}.npy', virtual_coil_data)
 
     ####################################################################
     # FOLLOWING CODE IS FOR VISUALIZATION OF FINAL RESULT
