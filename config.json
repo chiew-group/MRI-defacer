@@ -1,9 +1,9 @@
 {
-    "data_path": "raw_data/train/0_12ch.npy",
-    "data_id": "0_12ch",
+    "data_path": "example.npy",
+    "data_id": "example",
     "x_slice": 80,
     "y_slice": 80,
-    "z_slice": 80,
+    "z_slice": 120,
     "threshold_method": "face_retained",
     "threshold": 2,
     "gap": 10, 
