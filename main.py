@@ -1,16 +1,18 @@
 import json
 
 import numpy as np 
-from scipy.ndimage import binary_dilation
-from scipy.ndimage import binary_erosion
 from scipy.linalg import orth
+from scipy.linalg import norm
+
+from skimage.morphology import convex_hull_image 
 
 from ROVir import rovir
-from ROVir import top_nv_sir
-from ROVir import top_nv_signal_retained
+from ROVir import top_nv
 from ROVir import form_virtual_coil_data
 
-from visualization import display
+from visualization import display_defaced
+from visualization import compare_retention
+from visualization import show_virtual_coils
 
 from to_nifti import niftify
 from automask import gen_mask
@@ -19,110 +21,96 @@ RED = '\033[91m'
 GREEN = '\033[92m'
 RESET = '\033[0m'
 
-def rsos(data):
+def rsos(image):
     '''
-    Computes the root sum of squares of the data across the channel dimension.
+    Computes the root sum of squares of the image across the channel dimension.
     
     Parameters
     ----------
-        data -> np.ndarray: a 4D array of MRI data, shape (x, y, ch, z)
+        image -> np.ndarray: a 4D array of MRI image data, shape (x, y, z, ch)
 
     Returns
     ----------
         np.ndarray: a 3D array of the root sum of squares of the data, shape (x, y, z)
     '''
     
-    return np.sqrt(np.sum(np.abs(data)**2, axis=3))
+    return np.sqrt(np.sum(np.abs(image)**2, axis=3))
 
-def expand_mask(brain_mask, maskB):
 
-    #maskB = binary_erosion(maskB, iterations=7) #just in case random outlier points were generated
-    x_face, y_face, z_face = np.nonzero(maskB)
-    xmaxf, xminf = np.max(x_face), np.min(x_face)
-    ymaxf, yminf = np.max(y_face), np.min(y_face)
-    zmaxf, zminf = np.max(z_face), np.min(z_face)
+def set_masks(ROI, interference, gap=10):
 
-    x_brain, y_brain, z_brain = np.nonzero(brain_mask)
-    xmaxb, xminb = np.max(x_brain), np.min(x_brain)
-    ymaxb, yminb = np.max(y_brain), np.min(y_brain)
-    zmaxb, zminb = np.max(z_brain), np.min(z_brain)
+    '''
+    Manipulates the segmentation outputs to simplify shape. 
+    
+    Parameters
+    ----------
+        ROI -> np.ndarray: a 3D binary mask representing brain region, shape (x, y, z)
+        interference -> np.ndarray: a 3D binary mask representing face region, shape (x, y, z)
+        gap -> int: how wide of a gap between ROI and interference is wanted
 
-    new_maskB = np.zeros((maskB.shape))
- 
-    # #METHOD 1: STRIPES WITH BRAIN BORDER   
+    Returns
+    ----------
+        maskA -> np.ndarray: a 3D array of the brain region simplified
+        maskB -> np.ndarray: a 3D array of the face region simplified 
 
-    # new_maskB[:, ymaxb:, :] = 1
-    # new_maskB[:, :, :zminb] = 1
+    '''
 
-    #METHOD 2: BRAIN FACE AVERAGE BORDER STRIPES
+    # simplify shape using convex hull
+    maskA = convex_hull_image(ROI).astype(int)
+    maskB = convex_hull_image(interference).astype(int)
 
-    yavg = (ymaxb+yminf) //2
-    zavg = (zmaxf+zminb) //2
-
-    # new_maskB[:, yavg:, :] = 1
-    # new_maskB[:, :, :zavg] = 1
-
-    #METHOD 3: FACE 4 DIRECTION BOARDER 
-    #taking face boundary in each direction to define box
-    # new_maskB[xminf:xmaxf, yminf:ymaxf, zminf:zmaxf] = 1
-
-    # #METHOD 4: OVAL MASK USING FACE MASK DIAMETER
-    x, y, z = np.meshgrid(np.arange(maskB.shape[0]), np.arange(maskB.shape[1]), np.arange(maskB.shape[2]), indexing = 'ij')
-    xcent, ycent, zcent = (xmaxf + xminf) //2, (ymaxf + yminf) //2, (zmaxf+zminf) //2
-    xrad, yrad, zrad = (xmaxf - xminf) //2, (ymaxf - yminf) //2, (zmaxf - zminf) //2
-    circ = (((x-xcent)/xrad)**2 + ((y-ycent)/yrad)**2 + ((z-zcent)/zrad)**2) <= 1
-    overlap = circ.astype(bool) & brain_mask.astype(bool)
-    # if np.count_nonzero(overlap) != 0:
-    #     x_overlap, y_overlap, z_overlap = np.nonzero(overlap.astype(int))
-    #     ymaxo, zmino = np.max(y_overlap), np.min(z_overlap)
-    #     circ = (((x-xcent)/xrad)**2 + ((y-ycent)/(ymaxo-ycent))**2 + ((z-zcent)/(zmino-zcent))**2) <= 1
+    # get rid of overlap between masks by shrinking face mask
+    overlap = maskA.astype(bool) & maskB.astype(bool) 
     while np.count_nonzero(overlap) != 0:
-        circ = binary_erosion(circ)
-        overlap = circ.astype(bool) & brain_mask.astype(bool)
+        _, y_face_true, z_face_true = np.nonzero(maskB) # find indices where face mask is nonzero
+        zmax_face = np.max(z_face_true) # find top of face mask (closest to brain)
+        ymin_face = np.min(y_face_true) # find edge of face mask (closest to neck)
+        maskB[:, ymin_face, :] = 0 
+        maskB[:, :, zmax_face] = 0
+        overlap = maskA.astype(bool) & maskB.astype(bool) 
 
-    new_maskB[circ] =1
-    
-    # # #METHOD 5: start with og mask, binary dilate until it hits the brain 
-    # new_maskB = maskB
-    # overlap = new_maskB.astype(bool) & brain_mask.astype(bool)
-    # i = 0
-    # while np.count_nonzero(overlap) ==0:
-    #     new_maskB = binary_dilation(new_maskB) 
-    #     overlap = new_maskB.astype(bool) & brain_mask.astype(bool)
-    #     i+=1
-    # print(i)
+    # create addition gap by shrinking face mask
+    for _ in range(gap):
+        _, y_face_true, z_face_true = np.nonzero(maskB)
+        zmax_face = np.max(z_face_true)
+        ymin_face = np.min(y_face_true)
+        maskB[:, ymin_face, :] = 0
+        maskB[:, :, zmax_face] = 0
 
-    return new_maskB
+    return(maskA, maskB)
 
-    # x, y, z = np.meshgrid(np.arange(maskB.shape[0]), np.arange(maskB.shape[1]), np.arange(maskB.shape[2]), indexing = 'ij')
-    # rect_prism = ((x>= 0) & (x<maskB.shape[0]) & (y >= ymaxb) & (y <maskB.shape[1]) & (z>=0) & (z<zminb))
-    # new_maskB[rect_prism] = 1
 
-    # for x in range(maskB.shape[0]):
-    #     y, z = np.nonzero(maskB[x, :, :])
-
-    #     if len(y) != 0 and len(z) != 0:
-    #         yminf, ymaxf = np.min(y), np.max(y)
-    #         zminf, zmaxf = np.min(z), np.max(z)
-    #         new_maskB[x, yminf:ymaxf, zminf:zmaxf] = 1
-
-    # for y in range(maskB.shape[1]):
-    #     x, z = np.nonzero(maskB[:, y, :])
-
-    #     if len(x) != 0 and len(z) != 0:
-    #         xminf, xmaxf = np.min(x), np.max(x)
-    #         zminf, zmaxf = np.min(z), np.max(z)
-    #         new_maskB[xminf:xmaxf,y, zminf:zmaxf] = 1
-    
 def make_A_B(image, nc, maskA, maskB):
-    maskA = np.expand_dims(maskA, axis = 3) # to ensure mask has same dimensions as data
+    '''
+
+    To compute the covariance matrices A and B that correspond to the brain and face regions, respectively.
+
+    Parameters
+    ----------
+        image -> np.ndarray: the reconstructed image with shape (x, y, z, ch)
+        nc -> int: the number of original coils 
+        maskA -> np.ndarray: a 3D array of the brain region
+        maskB -> np.ndarray: a 3D array of the face region
+
+    Returns
+    ----------
+        A -> np.ndarray: the 2D covariance matrix corresponding to the brain, shape (nc, nc)
+        B -> np.ndarray: the 2D covariance matrix corresponding to the face, shape (nc, nc)
+
+    '''
+    # to ensure 3D masks now has same dimensions as 4D image data
+    maskA = np.expand_dims(maskA, axis = 3) 
     maskB = np.expand_dims(maskB, axis = 3)
 
-    maskedA = image*maskA # applying masks by entry-wise mult
+    # applying masks to image data by entry-wise multiplication
+    maskedA = image*maskA 
     maskedB = image*maskB 
 
-    A = np.reshape(maskedA, (-1, nc)).conj().T @ np.reshape(maskedA, (-1, nc)) # Nc x Nc
+    # compute the nc x nc covariance matrices
+    A = np.reshape(maskedA, (-1, nc)).conj().T @ np.reshape(maskedA, (-1, nc))
     B = np.reshape(maskedB, (-1, nc)).conj().T @ np.reshape(maskedB, (-1, nc))
+
+    # print(np.linalg.matrix_rank(B)) # checking rank of B
 
     return (A, B)
     
@@ -132,15 +120,13 @@ if __name__ == "__main__":
     with open('config.json', 'r') as config_file:
         inputs = json.load(config_file)
 
-    # need validation for file type and path 
+    # loading the numpy raw k-space data and data ID
     data = np.load(inputs["data_path"]) 
+    dataID = inputs["data_id"]
+
     print(GREEN + "Data has been successfully loaded" + RESET)
 
-    # moving data axes to (x, y, z, ch) shape
-    x_y_z_ch = inputs["x_y_z_channel"]
-    sorted_ind = np.argsort(x_y_z_ch)
-    data = np.moveaxis(data, [0, 1, 2, 3], sorted_ind) 
-
+    # flipping data based on affine
     a11 = float(inputs["a11"])
     a22 = float(inputs["a22"])
     a33 = float(inputs["a33"])
@@ -154,7 +140,12 @@ if __name__ == "__main__":
     if a33 < 0:
         data = data[:, :, ::-1, :]
 
-    # defining image slices
+    # moving data axes to (x, y, z, ch) shape
+    x_y_z_ch = inputs["x_y_z_channel"]
+    sorted_ind = np.argsort(x_y_z_ch)
+    data = np.moveaxis(data, [0, 1, 2, 3], sorted_ind) 
+
+    # defining image slices to visualize  
     try:
         x_slice = int(inputs["x_slice"])
         y_slice = int(inputs["y_slice"])
@@ -164,15 +155,15 @@ if __name__ == "__main__":
         exit()
 
     if x_slice >= data.shape[0] or x_slice < -data.shape[0]:
-        print(RED + "Your x slice is out of bounds. Check your image shape."  + RESET )
+        print(RED + f"Your x slice is out of bounds for image shape: {data.shape}"  + RESET )
         exit()
 
     if y_slice >= data.shape[1] or y_slice < -data.shape[1]:
-        print(RED + "Your y slice is out of bounds. Check your image shape."  + RESET)
+        print(RED + f"Your y slice is out of bounds for image shape: {data.shape}"  + RESET)
         exit()
 
     if z_slice >= data.shape[2] or z_slice < -data.shape[2]:
-        print(RED + "Your z slice is out of bounds. Check your image shape."  + RESET)
+        print(RED + f"Your z slice is out of bounds for image shape: {data.shape}"  + RESET)
         exit()
 
     try:
@@ -182,97 +173,66 @@ if __name__ == "__main__":
         exit()
 
     # fourier transform and shift data 
-    # image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
-    image = np.fft.ifftn(data, axes = (0,1,2)) #ATTENTION: ONLY FOR THE CALGARY DATASET, WHICH WAS ALREADY SHIFTED
-    image_rss = rsos(image)
+    og_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
+    og_image_rsos = rsos(og_image) # calculate rsos of image
 
-    # niftify(image_rss, abs(a11), abs(a22), abs(a33))
-    # gen_mask(r"results\input_image.nii", r"results\output_mask.nii") 
-    
-    maskBface = np.load(r"results\face_mask.npy") # define face mask
-    maskBfat = np.load(r"results\fat_mask.npy") # define face mask
-    maskBmusc = np.load(r"results\muscle_mask.npy") # define face mask
-    brain_mask = np.load(r"results\brain_mask.npy")
+    niftify(og_image_rsos, abs(a11), abs(a22), abs(a33), f'input_image_{dataID}') # save nifti of image
+    gen_mask(f'results/input_image_{dataID}.nii', f'results/output_mask_{dataID}.nii', dataID) # send nifti image for segmentation
 
+    face_mask = np.load(f'results/face_mask_{dataID}.npy') # load face mask
+    brain_mask = np.load(f'results/brain_mask_{dataID}.npy') # load brain mask
     print(GREEN + "Mask has been successfully loaded" + RESET)
-    maskB = maskBface #+ maskBmusc#maskBfat + maskBmusc
-    maskB = expand_mask(brain_mask, maskBface)
-    maskA = np.ones((data.shape[0], data.shape[1], data.shape[2])) # define signal mask
-    # print(np.count_nonzero(maskBface), np.count_nonzero(maskBfat), np.count_nonzero(maskBmusc))
 
-    # maskA = brain_mask
-    maskA = maskA - maskB
+    maskA, maskB = set_masks(brain_mask, face_mask, gap) # apply additional masking scheme
+    print(GREEN + "Masks have been prepared" + RESET)
 
-    # maskA = brain_mask 
-    # maskB = np.ones(data.shape[:3]) - maskA
+    nc = data.shape[-1] # get total number of original coils
+    brain_covar, face_covar = make_A_B(og_image, nc, maskA, maskB) # create covariance matrices
+    print(GREEN + "Brain and face covariance matrices have been computed" + RESET)
 
-    # if gap >= 1: # binary_erosion iterates all is gone if iteration is less than 1
-    #     maskA = maskA - binary_dilation(maskB, iterations=gap)
-    #     maskB = binary_erosion(maskB, iterations=gap)
-    # else:
-    #     maskA = maskA - maskB
-
-    # # manual mask
-    # maskA = np.ones(data.shape[:3])
-    # maskB = np.ones(data.shape[:3])
-    # maskA[:data.shape[0]//2, :data.shape[1], :data.shape[2]] = 0
-    # maskB = maskB - maskA
-
-    # maskA = np.ones(data.shape[:3])
-    # maskB = np.zeros(data.shape[:3])
-    # x_start, x_end = 0, data.shape[0] 
-    # y_start, y_end = 110, data.shape[1]
-    # z_start, z_end = 0, 85
-    # gap = 0
-    # maskA[x_start:x_end, y_start:y_end, z_start:z_end] = 0
-    # maskB[x_start-gap:x_end+gap, y_start-gap:y_end+gap, z_start-gap:z_end+gap]= 1
-
-    nc = data.shape[-1]
-    A, B = make_A_B(image, nc, maskA, maskB)
-
-    V = rovir(nc, A, B) # finding the eigenvectors for Av = λBv
+    eigenvec = rovir(nc, brain_covar, face_covar) # finding the eigenvectors for (brain_covar)v = λ(face_covar)v
     print(GREEN + "Eigenvectors computed" + RESET)
 
-    import matplotlib
-    matplotlib.use('Qt5Agg')
-    import matplotlib.pyplot as plt
 
-    # # displaying all virtual coils
-    # all_coils = form_virtual_coil_data(V, data)
-    # # image_all = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(all_coils, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
-    # image_all = np.fft.ifftn(all_coils, axes = (0, 1, 2)) #ATTENTION: ONLY FOR THE CALGARY DATASET, WHICH WAS ALREADY SHIFTED
-    # figure = plt.figure(figsize = (10, 10))
-    # for coil in range(all_coils.shape[3]):
-    #     plt.subplot(4, 3, coil+1)
-    #     plt.imshow(np.abs(image_all[x_slice, :, :, coil]), cmap='gray', vmin = 0, vmax = 10000)
-    #     # plt.imshow(maskB[x_slice, :, :], alpha = 0.4, cmap = 'Reds')
-    #     # plt.imshow(brain_mask[x_slice, :, :], alpha = 0.4, cmap = 'Greens')
-    #     # plt.imshow(maskA[x_slice, :, :], alpha = 0.4, cmap = 'Greens')
-    #     plt.title(f'Virtual Coil {coil+1}')
-    # plt.show()
+    # compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice) # visualize comparison between different # of coils retained
+    # show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual coils
 
-    # exit()
-
-    sir_threshold = float(inputs["sir_threshold"])
+    method = inputs["threshold_method"] 
+    threshold = inputs["threshold"]
     
-    i = top_nv_sir(V, nc, A, B, sir_threshold) # finding top nv eigenvectors based on SIR
-    top_nv_signal_retained(V, nc, A, B, sir_threshold) # finding top nv eigenvectors based on SIR
+    # choose based on heuristics the number of eigenvectors to retain
+    top_eigenvec = top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold)
+
+    print(f'The top nv eigenvectors contain the first {top_eigenvec} eigenvectors')
+    eigenvec_retain = eigenvec[:,:top_eigenvec] # retain only the top eigenvectors 
+    eigenvec_retain = orth(eigenvec_retain) # orthonormalize retained eigenvectors to noise-whiten
+
+    orth_proj = eigenvec_retain @ eigenvec_retain.conj().T # find orthogonal projection matrix for span of retained eigenvectors
+   
+    # calculate signal retained from maskA region
+    brain_retain = (norm((orth_proj @ brain_covar @ orth_proj), ord = 'fro') / norm (brain_covar, ord = 'fro'))*100
+    print(GREEN + f'BRAIN SIGNAL RETAINED:{brain_retain}')
+
+    # calculate signal retained from maskB region
+    face_retain = (norm((orth_proj @ face_covar @ orth_proj), ord = 'fro') / norm (face_covar, ord = 'fro'))*100
+    print(f'FACE SIGNAL RETAINED:{face_retain}' + RESET)
     
-    # exit()
+    # forming virtual coils, with eigenvectors as linear combo weights
+    virtual_coil_data = form_virtual_coil_data(eigenvec_retain, data) 
+    # print(virtual_coil_data.shape)
+    print(GREEN + f'Virtual coils successfully formed' + RESET)
+
+    # # save final defaced raw data
+    # np.save(f'results/defaced/defaced_{dataID}.npy', virtual_coil_data)
+
+    ####################################################################
+    # FOLLOWING CODE IS FOR VISUALIZATION OF FINAL RESULT
+
+    # compute image from virtual coil data
+    defaced_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(virtual_coil_data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
+    defaced_image = rsos(defaced_image) # find rsos of virtual coil image data
+
+    display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, brain_retain, face_retain) # display images
     
-    # V = orth(V)
-    print(f'The top nv eigenvectors contain the first {i} eigenvectors')
-    V_retain = V[:,:i] # retain only the top nv eigenvectors 
-    V_retain = orth(V_retain)
-    virtual_coil_data = form_virtual_coil_data(V_retain, data) # forming virtual coils, with eigenvectors as linear combo weights
-
-    # shift, compute fourier transform, shift over x, y, z axes
-    # image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(virtual_coil_data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
-    image = np.fft.ifftn(virtual_coil_data, axes = (0, 1, 2)) #ATTENTION: ONLY FOR THE CALGARY DATASET, WHICH WAS ALREADY SHIFTED
-
-    image_rss = rsos(image) # find root sum of squares of image over the channel dimension
-    image_rss = (image_rss - image_rss.min()) / (image_rss.max() - image_rss.min())
-
-    kspace_rss = rsos(virtual_coil_data) # compute rsos of k-space data
-
-    display(image_rss, kspace_rss, x_slice, y_slice, z_slice, brain_mask, maskB, gap*2) # display images2
+    # save nifti of results for visualization in 3DSlicer
+    niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'defaced/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain}_face={face_retain}')
