@@ -4,7 +4,7 @@
     "x_slice": 80,
     "y_slice": 80,
     "z_slice": 80,
-    "threshold_method": "interference_retained",
+    "threshold_method": "face_retained",
     "threshold": 2,
     "gap": 10, 
     "x_y_z_channel": [0, 1, 2, 3],
