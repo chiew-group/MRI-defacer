@@ -72,7 +72,7 @@ def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold):
 
     Parameters
     ----------
-        V -> np.ndarray: an nc x nc array, whose columns are sorted eigenvectors 
+        eigenvec -> np.ndarray: an nc x nc array, whose columns are sorted eigenvectors 
         nc -> int: the number of original eigenvectors 
         brain_covar -> np.ndarray: convariance matrix corresponding to brain region
         face_covar -> np.ndarray: covariance matrix corresponding to face region 
