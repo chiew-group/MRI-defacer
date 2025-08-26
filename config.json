@@ -7,7 +7,7 @@
     "threshold_method": "interference_retained",
     "threshold": 2,
     "gap": 10, 
-    "x_y_z_channel": [2, 1, 0, 3],
+    "x_y_z_channel": [0, 1, 2, 3],
     "a11": 1, 
     "a22": 1,
     "a33": 1
