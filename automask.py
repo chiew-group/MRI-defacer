@@ -2,21 +2,29 @@ import numpy as np
 import nibabel as nib 
 from totalsegmentator.python_api import totalsegmentator 
 import os
+# from scipy.ndimage import zoom
 
-def gen_mask(input_fp, output_fp):
-        # calling TotalSegmentator API
+GREEN = '\033[92m'
+RESET = '\033[0m'
+
+def gen_mask(input_fp, output_fp, saveID):
+        '''
+        To generate numpy binary masks for the brain and face regions using TotalSegmentator 
+        
+        Parameters
+        ----------
+        input_fp -> str: path to nifti file of initial reconstruction
+        output_fq -> str: path to output nifti masks of face and brain
+        saveID -> str: ID to save numpy masks 
+        '''
+
+        # calling TotalSegmentator API for face_mr task
         totalsegmentator(
                         input = input_fp, 
                         output = output_fp,
                         task = "face_mr"
         )
-
-        totalsegmentator(
-                        input = input_fp , 
-                        output = output_fp,
-                        task = "tissue_types_mr"
-        )
-        
+        # calling TotalSegmentator API for brain task
         totalsegmentator(
                         input = input_fp, 
                         output = output_fp, 
@@ -25,18 +33,14 @@ def gen_mask(input_fp, output_fp):
         )
 
         face_mask = nib.load(os.path.join(output_fp, "face.nii.gz"))
-        sub_fat_mask = nib.load(os.path.join(output_fp, "subcutaneous_fat.nii.gz"))
-        muscle_mask = nib.load(os.path.join(output_fp, "skeletal_muscle.nii.gz"))
         brain_mask = nib.load(os.path.join(output_fp, "brain.nii.gz"))
 
+        # convert to numpy data 
         face_mask_np = face_mask.get_fdata()
-        sub_fat_mask_np = sub_fat_mask.get_fdata()
-        muscle_mask_np = muscle_mask.get_fdata()
         brain_mask_np = brain_mask.get_fdata()
         
-        np.save(r"results\face_mask.npy", face_mask_np)
-        np.save(r"results\fat_mask.npy", sub_fat_mask_np)
-        np.save(r"results\muscle_mask.npy", muscle_mask_np)
-        np.save(r"results\brain_mask.npy", brain_mask_np)
+        # save as numpy masks
+        np.save(f'results/face_mask_{saveID}.npy', face_mask_np)
+        np.save(f'results/brain_mask_{saveID}.npy', brain_mask_np)
 
-        print("Mask saved successfully")
+        print(GREEN + "Mask saved successfully" + RESET)
