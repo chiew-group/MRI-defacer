@@ -197,8 +197,8 @@ if __name__ == "__main__":
     # compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice) # visualize comparison between different # of coils retained
     # show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual coils
 
-    method = inputs["threshold_method"] 
-    threshold = inputs["threshold"]
+    method = inputs["threshold_method"] # load method/metric for selecting top coils
+    threshold = inputs["threshold"] # load limit/requirement for selecting top coils
     
     # choose based on heuristics the number of eigenvectors to retain
     top_eigenvec = top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold)
