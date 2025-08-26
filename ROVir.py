@@ -5,6 +5,9 @@ from scipy.linalg import norm
 import matplotlib.pyplot as plt
 import kneed
 
+RED = '\033[91m'
+RESET = '\033[0m'
+
 def rovir(nc, brain_covar, face_covar):
     '''
     Finds the eigenvectors from the generalized eigenvalue problem 
@@ -127,7 +130,7 @@ def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold):
         else: # if null, use automatic elbow selection to threshold based on face retention curve
             coil = elbow_finder(nc, face_retain, 0.1, "convex", "increasing")
     else:
-        print("Invalid threholding method. Do you mean 'SIR', 'signal', 'interference', 'signal_retained', or 'interference_retained'?")
+        print(RED + "Invalid threholding method. Do you mean 'SIR', 'brain_retained', or 'face_retained'?" + RESET)
         exit()
 
     xaxis = np.arange(1, nc+1)
@@ -135,21 +138,21 @@ def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold):
     # visualize metrics as scatterplots
     plt.subplot(2,2,1)
     plt.scatter(xaxis, sirs, c = "blue")
-    plt.axvline(x=coil, linestyle = "--", label = "Threshold")
+    plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
     plt.title("SIR of Each Virtual Coil")
     plt.xlabel("jth Coil")
     plt.legend()
 
     plt.subplot(2,2,2)
     plt.scatter(xaxis, brain_signal, c = "green")
-    plt.axvline(x=coil, linestyle = "--", label = "Threshold")
+    plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
     plt.title("Signal Energy of Each Virtual Coil")
     plt.xlabel("jth Coil")
     plt.legend()
 
     plt.subplot(2,2,3)
     plt.scatter(xaxis, face_signal, c = "red")
-    plt.axvline(x=coil, linestyle = "--", label = "Threshold")
+    plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
     plt.title("Interference Energy of Each Virtual Coil")
     plt.xlabel("jth Coil")
     plt.legend()
