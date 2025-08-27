@@ -22,7 +22,7 @@ Set up a Python environment for MRI Defacer
 conda create -n MRIDEFACER python=3.13
 ```
 
-Install TotalSegmentator and the following required dependencies. You may use the requirements.txt file to quickly install the dependencies.
+Install TotalSegmentator and the following required dependencies
 
 ```
 pip install kneed==0.7.0
@@ -40,6 +40,11 @@ Clone this GitHub repository
 ```
 git clone https://github.com/chiew-group/MRI-defacer.git
 cd MRI-defacer
+```
+
+Alternatively, you may use the requirements.txt file to quickly install the dependencies using 
+```
+pip install -r requirements.txt
 ```
 
 After cloning the repository, head to the config.json file to specify your inputs. A description of each field can be found in the Expected Input section. Then, run the main.py file. Given the expected input formats, this tool is fully automated. The output is the defaced raw k-space data.
@@ -85,37 +90,23 @@ This parameters specifies the amount times the face mask is shrunk to create a g
 #### 4. x_y_z_channel | default = [0, 1, 2, 3]
 If the current shape of the data is not the required data.shape = (x, y, z, ch), the user can specify how the current data shape maps to the required data shape using a list. The first element specifies the current index of the x-axis in data.shape, the second element specifies the current index of the y-axis in data.shape, the third element specifies the current index of the z-axis in data.shape, and the fourth element specifies the current index of the channel dimension in data.shape. For example, if x_y_z_channel = [2, 0, 1, 3] is specified, it means the current axis 0 corresponds to y, the current axis 1 corresponds to z, the current axis 2 corresponds to x, and the current axis 3 corresponds to channels (i.e. data.shape = (y, z, x, ch)).  
 
-## Example Results
+## Example Usage
+After running main.py, the final defaced k-space data should exist in the results folder as defaced_{dataID}.npy. You can see example outputs in the [demo.ipynb](demo.ipynb) Notebook. The example uses a fully sampled 12-channel dataset from Calgary Campinas [3] processed to be oriented as outlined in [Expected Input](#expected-input) and our default parameters in config.json. 
 
-This example uses a fully sampled 12-channel dataset from Calgary Campinas [3], which we named example.npy, and our default parameters in config.json. Our default heuristics chose to retain 9 virtual coils, resulting in a brain retention of 64% and face retention of 1.5%. 
+## More Options for Developers & Troubleshooting
 
-![result image](assets/results.png)
-Here are what the metrics look like for the virtual coils 
-
-Here are what the virtual coils look like 
-
-Here is a comparison 
-
-## More Options for Developers
-what functions can be changed 
-show options for visualization 
-
-You may uncomment line 199 in main.py to see a comparison
+1. You may uncomment line 199 in main.py to see a comparison
 ```
 compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice) # visualize comparison between different # of coils retained
 ```
 
-You may uncomment line 200 in main.py to see all virtual coils 
+2. You may uncomment line 200 in main.py to see all virtual coils 
 ```
 show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual coils
 ```
-Here is a more detailed description of our pipeline flow: 
-(1)
 
-## Troubleshooting 
-1. Wrong affine or orientation: check direction, voxel spacing, segmentation toool  may not be doing that well 
-2. 
-
+3. Wrong affine or orientation: check the shape of your data and the voxel spacing. This affects the ability of TotalSegmentator to identify the brain and face regions. The expected orientations as outlined in [Expected Input](#expected-input) has worked in our testing.
+4. Poor threshold heuristic: the threshold_method and threshold parameters in config.json may not be generalizable to your data. You may view the metric curves and adjust accordingly. 
 
 
 ## Citations 
