@@ -47,6 +47,8 @@ git clone https://github.com/chiew-group/MRI-defacer.git
 cd MRI-defacer
 ```
 
+Note that our pipeline uses the face_mr task from TotalSegmentator, which requires a free non-commercial use license. You must obtain and activate the license before using this tool. You can find out how to do so from the TotalSegmentator repository [[2]](#2-wasserthal-j-breit-h-c-meyer-mt-pradella-m-hinck-d-sauter-aw-heye-t-boll-d-cyriac-j-yang-s-bach-m-segeroth-m-2023-totalsegmentator-robust-segmentation-of-104-anatomic-structures-in-ct-images-radiology-artificial-intelligence-httpsdoiorg101148ryai230024).
+
 After cloning the repository, head to the [config.json](config.json) file to specify your inputs. A description of each field can be found in the [Expected Input](#expected-input) section. Then, run the [main.py](main.py) file. Given the expected input formats, this tool is fully automated. The output is the defaced raw k-space data.
 
 ## Expected Input
@@ -111,6 +113,7 @@ show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual c
 3. Wrong affine or orientation: check the shape of your data and the voxel spacing. This affects the ability of TotalSegmentator to identify the brain and face regions. The expected orientations as outlined in [Expected Input](#expected-input) has worked in our testing. Check the segmentation results in a folder named **segmentation**.
 4. Poor threshold heuristic: the **threshold_method** and **threshold** parameters in [config.json](config.json) may not be generalizable to your data. You may view the [metric curves](#2-threshold--default--2) and adjust accordingly. 
 5. The NIfTI version of your input may not have been generated well. You can check the input after coverting into a NIfTI image, which can be found in a folder named **input** using 3DSlicer. Note in [to_nifti.py](to_nifti.py), the image intensity is max-min normalized to 0-255. 
+6. Ensure that you have obtained and activated a license for the face_mr task from TotalSegmentator. Otherwise, the TotalSegmentator call will fail. 
 
 ## Citations 
 #### [1] Kim D, Cauley SF, Nayak KS, Leahy RM, Haldar JP. Region- optimized virtual (ROVir) coils: Localization and/or suppression of spatial regions using sensor- domain beamforming. Magn Reson Med. 2021;86:197–212. https://doi.org/10.1002/mrm.28706 
