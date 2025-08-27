@@ -176,11 +176,11 @@ if __name__ == "__main__":
     og_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
     og_image_rsos = rsos(og_image) # calculate rsos of image
 
-    niftify(og_image_rsos, abs(a11), abs(a22), abs(a33), f'input_image_{dataID}') # save nifti of image
-    gen_mask(f'results/input_image_{dataID}.nii', f'results/output_mask_{dataID}.nii', dataID) # send nifti image for segmentation
+    niftify(og_image_rsos, abs(a11), abs(a22), abs(a33), f'input/input_image_{dataID}') # save nifti of image
+    gen_mask(f'input/input_image_{dataID}.nii', f'segmentations/output_mask_{dataID}.nii', dataID) # send nifti image for segmentation
 
-    face_mask = np.load(f'results/face_mask_{dataID}.npy') # load face mask
-    brain_mask = np.load(f'results/brain_mask_{dataID}.npy') # load brain mask
+    face_mask = np.load(f'segmentations/face_mask_{dataID}.npy') # load face mask
+    brain_mask = np.load(f'segmentations/brain_mask_{dataID}.npy') # load brain mask
     print(GREEN + "Mask has been successfully loaded" + RESET)
 
     maskA, maskB = set_masks(brain_mask, face_mask, gap) # apply additional masking scheme
@@ -225,7 +225,7 @@ if __name__ == "__main__":
     print(GREEN + f'Virtual coils successfully formed' + RESET)
 
     # save final defaced raw data
-    np.save(f'results/defaced/defaced_{dataID}.npy', virtual_coil_data)
+    np.save(f'results/defaced_{dataID}.npy', virtual_coil_data)
 
     ####################################################################
     # FOLLOWING CODE IS FOR VISUALIZATION OF FINAL RESULT
@@ -237,4 +237,4 @@ if __name__ == "__main__":
     display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, brain_retain, face_retain) # display images
     
     # save nifti of results for visualization in 3DSlicer
-    niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'defaced/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain}_face={face_retain}')
+    niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'results/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain}_face={face_retain}')

@@ -4,7 +4,7 @@ import nibabel as nib
 GREEN = '\033[92m'
 RESET = '\033[0m'
 
-def niftify(image, a11, a22, a33, name):
+def niftify(image, a11, a22, a33, save_path):
 
     '''
     To convert numpy files into nifti files for image visualization tools and segmentation tools. 
@@ -33,6 +33,6 @@ def niftify(image, a11, a22, a33, name):
     print(nifti_img.affine)
 
     # saving the nifti file 
-    fp = f'results/{name}.nii'
+    fp = f'{save_path}.nii'
     nib.save(nifti_img, fp)
     print(GREEN + "Nifti file successfully saved" + RESET)

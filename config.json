@@ -1,5 +1,5 @@
 {
-    "data_path": "example.npy",
+    "data_path": "input/example.npy",
     "data_id": "example",
     "x_slice": 80,
     "y_slice": 80,

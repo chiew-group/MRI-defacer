@@ -40,7 +40,7 @@ def gen_mask(input_fp, output_fp, saveID):
         brain_mask_np = brain_mask.get_fdata()
         
         # save as numpy masks
-        np.save(f'results/face_mask_{saveID}.npy', face_mask_np)
-        np.save(f'results/brain_mask_{saveID}.npy', brain_mask_np)
+        np.save(f'segmentations/face_mask_{saveID}.npy', face_mask_np)
+        np.save(f'segmentations/brain_mask_{saveID}.npy', brain_mask_np)
 
         print(GREEN + "Mask saved successfully" + RESET)
