@@ -47,7 +47,7 @@ git clone https://github.com/chiew-group/MRI-defacer.git
 cd MRI-defacer
 ```
 
-Note that our pipeline uses the face_mr task from TotalSegmentator, which requires a free non-commercial use license. You must obtain and activate the license before using this tool. You can find out how to do so from the TotalSegmentator repository [[2]](#2-wasserthal-j-breit-h-c-meyer-mt-pradella-m-hinck-d-sauter-aw-heye-t-boll-d-cyriac-j-yang-s-bach-m-segeroth-m-2023-totalsegmentator-robust-segmentation-of-104-anatomic-structures-in-ct-images-radiology-artificial-intelligence-httpsdoiorg101148ryai230024).
+**Note:** our pipeline uses the face_mr task from TotalSegmentator, which requires a free non-commercial use license. You must obtain and activate the license before using this tool. You can find out how to do so from the TotalSegmentator repository [[2]](#2-wasserthal-j-breit-h-c-meyer-mt-pradella-m-hinck-d-sauter-aw-heye-t-boll-d-cyriac-j-yang-s-bach-m-segeroth-m-2023-totalsegmentator-robust-segmentation-of-104-anatomic-structures-in-ct-images-radiology-artificial-intelligence-httpsdoiorg101148ryai230024).
 
 After cloning the repository, head to the [config.json](config.json) file to specify your inputs. A description of each field can be found in the [Expected Input](#expected-input) section. Then, run the [main.py](main.py) file. Given the expected input formats, this tool is fully automated. The output is the defaced raw k-space data.
 
