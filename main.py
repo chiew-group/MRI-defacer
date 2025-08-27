@@ -1,4 +1,5 @@
 import json
+import os
 
 import numpy as np 
 from scipy.linalg import orth
@@ -115,6 +116,9 @@ def make_A_B(image, nc, maskA, maskB):
     return (A, B)
     
 if __name__ == "__main__": 
+    os.makedirs('input', exist_ok = True)
+    os.makedirs('segmentations', exist_ok = True)
+    os.makedirs('results', exist_ok = True)
 
     # loading inputs from config file
     with open('config.json', 'r') as config_file:
