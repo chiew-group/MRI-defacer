@@ -110,6 +110,7 @@ show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual c
 
 3. Wrong affine or orientation: check the shape of your data and the voxel spacing. This affects the ability of TotalSegmentator to identify the brain and face regions. The expected orientations as outlined in [Expected Input](#expected-input) has worked in our testing. Check the segmentation results in a folder named **segmentation**.
 4. Poor threshold heuristic: the **threshold_method** and **threshold** parameters in [config.json](config.json) may not be generalizable to your data. You may view the [metric curves](#2-threshold--default--2) and adjust accordingly. 
+5. The NIfTI version of your input may not have been generated well. You can check the input after coverting into a NIfTI image, which can be found in a folder named **input** using 3DSlicer. Note in [to_nifti.py](to_nifti.py), the image intensity is max-min normalized to 0-255. 
 
 ## Citations 
 #### [1] Kim D, Cauley SF, Nayak KS, Leahy RM, Haldar JP. Region- optimized virtual (ROVir) coils: Localization and/or suppression of spatial regions using sensor- domain beamforming. Magn Reson Med. 2021;86:197–212. https://doi.org/10.1002/mrm.28706 
