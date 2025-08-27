@@ -3,17 +3,17 @@
 MRI Defacer is a tool for defacing multi-channel raw 3D MRI brain data. Instead of defacing reconstructed images which permanently alters the raw k-space data, MRI Defacer defaces in k-space to preserve the raw data. This defaced data can then be used and shared for reconstruction research, where having true raw data and protecting the privacy of participants is important.
 
 ### Brief Pipeline Overview
-We use the region-optmized virtual coils (ROVir) [1] framework to locally supress facial signal in k-space. Here are the steps we take: <br/>
+We use the region-optmized virtual coils (ROVir) [[1]](#1-kim-d-cauley-sf-nayak-ks-leahy-rm-haldar-jp-region--optimized-virtual-rovir-coils-localization-andor-suppression-of-spatial-regions-using-sensor--domain-beamforming-magn-reson-med-202186197212-httpsdoiorg101002mrm28706) framework to locally supress facial signal in k-space. Here are the steps we take: <br/>
 
 (1) We make an initial reconstruction to define the brain and face regions.
 
-(2) We employ TotalSegmentator's face_mr and total_mr tasks [2] to automatically generate a mask for the face and brain regions. We manipulate these masks to simplify their geometry and create space between them to optimize masking for the ROVir framework.
+(2) We employ TotalSegmentator's face_mr and total_mr tasks [[2]](#2-wasserthal-j-breit-h-c-meyer-mt-pradella-m-hinck-d-sauter-aw-heye-t-boll-d-cyriac-j-yang-s-bach-m-segeroth-m-2023-totalsegmentator-robust-segmentation-of-104-anatomic-structures-in-ct-images-radiology-artificial-intelligence-httpsdoiorg101148ryai230024) to automatically generate a mask for the face and brain regions. We manipulate these masks to simplify their geometry and create space between them to optimize masking for the ROVir framework.
 
 (3) We define a ROVir transform based on these masks. This transform mixes the original measurement coils to form virtual coils, with signal concentrated in either the brain or face regions. You can see the effect in [demo.ipynb](demo.ipynb), where the virtual coils are displayed.
 
 (4) We retain only the top virtual coils with only high brain region signal and discard the virtual coils that have high face region signal. Combining only the top virtual coils yields defaced k-sapce data. 
 
-The benefit of this pipeline is that we act on the coil dimension, discarding only coils with high face region signal, thus preserving raw k-space data. Currently, we have evaluated the pipeline using 14 sets of 12-channel data from Calgary Campinas [3] and one in-house obtained 48-channel dataset. On avergae, we saw a 64.3% brain retention and 1.5% face retention in the 12-channel datasets. For the 48-channel dataset, there was a 89% brain retention and 1.8% face retention. The number of channels your data has may affect the defacing abilities. 
+The benefit of this pipeline is that we act on the coil dimension, discarding only coils with high face region signal, thus preserving raw k-space data. Currently, we have evaluated the pipeline using 14 sets of 12-channel data from Calgary Campinas [[3]](#3-r-souza-et-al-an-open-multi-vendor-multi-field-strength-brain-mr-dataset-and-analysis-of-publicly-available-skull-stripping-methods-agreement-neuroimage-vol-170-pp-482494-apr-2018-doi-httpsdoiorg101016jneuroimage201708021) and one in-house obtained 48-channel dataset. On avergae, we saw a 64.3% brain retention and 1.5% face retention in the 12-channel datasets. For the 48-channel dataset, there was a 89% brain retention and 1.8% face retention. The number of channels your data has may affect the defacing abilities. 
 
 ## Installation and Usage
 Set up a Python environment for MRI Defacer
@@ -94,7 +94,7 @@ This parameters specifies the amount times the face mask is shrunk to create a g
 If the current shape of the data is not the required data.shape = (x, y, z, ch), the user can specify how the current data shape maps to the required data shape using a list. The first element specifies the current index of the x-axis in data.shape, the second element specifies the current index of the y-axis in data.shape, the third element specifies the current index of the z-axis in data.shape, and the fourth element specifies the current index of the channel dimension in data.shape. For example, if **x_y_z_channel = [2, 0, 1, 3]** is specified, it means the current axis 0 corresponds to y, the current axis 1 corresponds to z, the current axis 2 corresponds to x, and the current axis 3 corresponds to channels (i.e. data.shape = (y, z, x, ch)).  
 
 ## Example Usage
-After running main.py, the final defaced k-space data should exist in a folder named **results** as **defaced_{dataID}.npy**. You can see example outputs in the [demo.ipynb](demo.ipynb) Notebook. The example uses a fully sampled 12-channel dataset from Calgary Campinas [3] preprocessed to be oriented as outlined in [Expected Input](#expected-input) and our default parameters in config.json. 
+After running main.py, the final defaced k-space data should exist in a folder named **results** as **defaced_{dataID}.npy**. You can see example outputs in the [demo.ipynb](demo.ipynb) Notebook. The example uses a fully sampled 12-channel dataset from Calgary Campinas [[3]](#3-r-souza-et-al-an-open-multi-vendor-multi-field-strength-brain-mr-dataset-and-analysis-of-publicly-available-skull-stripping-methods-agreement-neuroimage-vol-170-pp-482494-apr-2018-doi-httpsdoiorg101016jneuroimage201708021) preprocessed to be oriented as outlined in [Expected Input](#expected-input) and our default parameters in config.json. 
 
 ## More Options for Developers & Troubleshooting
 
@@ -112,10 +112,8 @@ show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual c
 4. Poor threshold heuristic: the **threshold_method** and **threshold** parameters in [config.json](config.json) may not be generalizable to your data. You may view the [metric curves](#2-threshold--default--2) and adjust accordingly. 
 
 ## Citations 
-[1] Kim D, Cauley SF, Nayak KS, Leahy RM, Haldar JP. Region- optimized virtual (ROVir) coils: Localization and/or suppression of 
-spatial regions using sensor- domain beamforming. Magn Reson Med. 2021;86:197–212. 
-https://doi.org/10.1002/mrm.28706 
+#### [1] Kim D, Cauley SF, Nayak KS, Leahy RM, Haldar JP. Region- optimized virtual (ROVir) coils: Localization and/or suppression of spatial regions using sensor- domain beamforming. Magn Reson Med. 2021;86:197–212. https://doi.org/10.1002/mrm.28706 
 
-[2] Wasserthal, J., Breit, H.-C., Meyer, M.T., Pradella, M., Hinck, D., Sauter, A.W., Heye, T., Boll, D., Cyriac, J., Yang, S., Bach, M., Segeroth, M., 2023. TotalSegmentator: Robust Segmentation of 104 Anatomic Structures in CT Images. Radiology: Artificial Intelligence. https://doi.org/10.1148/ryai.230024
+#### [2] Wasserthal, J., Breit, H.-C., Meyer, M.T., Pradella, M., Hinck, D., Sauter, A.W., Heye, T., Boll, D., Cyriac, J., Yang, S., Bach, M., Segeroth, M., 2023. TotalSegmentator: Robust Segmentation of 104 Anatomic Structures in CT Images. Radiology: Artificial Intelligence. https://doi.org/10.1148/ryai.230024
 
-[3] R. Souza et al., “An open, multi-vendor, multi-field-strength brain MR dataset and analysis of publicly available skull stripping methods agreement,” NeuroImage, vol. 170, pp. 482–494, Apr. 2018, doi: https://doi.org/10.1016/j.neuroimage.2017.08.021.
+#### [3] R. Souza et al., “An open, multi-vendor, multi-field-strength brain MR dataset and analysis of publicly available skull stripping methods agreement,” NeuroImage, vol. 170, pp. 482–494, Apr. 2018, doi: https://doi.org/10.1016/j.neuroimage.2017.08.021.
