@@ -1,15 +1,17 @@
 {
-    "data_path": "input/test01.npy",
-    "data_id": "example",
+    "data_path": "input/test03.npy",
+    "data_id": "03x",
     "x_slice": 80,
     "y_slice": 80,
     "z_slice": 120,
     "threshold_method": "face_retained",
-    "threshold": 2,
+    "threshold": 10,
     "gap": 10, 
     "x_y_z_channel": [0, 1, 2, 3],
     "a11": 1, 
     "a22": 1,
-    "a33": 1,
-    "plt_on": false
+    "a33": -1,
+    "plt_on": false,
+    "face_mask": "segmentations/output_mask_03/face.nii.gz",
+    "brain_mask": "segmentations/output_mask_03/brain.nii.gz"
 }
