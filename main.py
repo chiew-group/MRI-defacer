@@ -1,5 +1,8 @@
 import json
 import os
+import argparse
+
+import nibabel as nib
 
 import numpy as np 
 from scipy.linalg import orth
@@ -21,6 +24,8 @@ from automask import gen_mask
 RED = '\033[91m'
 GREEN = '\033[92m'
 RESET = '\033[0m'
+
+import matplotlib
 
 def rsos(image):
     '''
@@ -100,28 +105,35 @@ def make_A_B(image, nc, maskA, maskB):
 
     '''
     # to ensure 3D masks now has same dimensions as 4D image data
-    maskA = np.expand_dims(maskA, axis = 3) 
-    maskB = np.expand_dims(maskB, axis = 3)
+    #maskA = np.expand_dims(maskA, axis = 3) 
+    #maskB = np.expand_dims(maskB, axis = 3)
 
     # applying masks to image data by entry-wise multiplication
-    maskedA = image*maskA 
-    maskedB = image*maskB 
+    maskedA = image*maskA[:,:,:,None]
+    maskedB = image*maskB[:,:,:,None]
 
     # compute the nc x nc covariance matrices
-    A = np.reshape(maskedA, (-1, nc)).conj().T @ np.reshape(maskedA, (-1, nc))
-    B = np.reshape(maskedB, (-1, nc)).conj().T @ np.reshape(maskedB, (-1, nc))
+    #A = np.reshape(maskedA, (-1, nc)).conj().T @ np.reshape(maskedA, (-1, nc))
+    #B = np.reshape(maskedB, (-1, nc)).conj().T @ np.reshape(maskedB, (-1, nc))
+    A = np.tensordot(np.conj(maskedA), maskedA, axes=([0,1,2],[0,1,2]))
+    B = np.tensordot(np.conj(maskedB), maskedB, axes=([0,1,2],[0,1,2]))
 
     # print(np.linalg.matrix_rank(B)) # checking rank of B
 
     return (A, B)
     
 if __name__ == "__main__": 
+    matplotlib.use('Qt5Agg')
     os.makedirs('input', exist_ok = True)
     os.makedirs('segmentations', exist_ok = True)
     os.makedirs('results', exist_ok = True)
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default='config.json', help='Path to config json file')
+    args = parser.parse_args()
+
     # loading inputs from config file
-    with open('config.json', 'r') as config_file:
+    with open(args.config, 'r') as config_file:
         inputs = json.load(config_file)
 
     # loading the numpy raw k-space data and data ID
@@ -180,14 +192,27 @@ if __name__ == "__main__":
     og_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
     og_image_rsos = rsos(og_image) # calculate rsos of image
 
-    niftify(og_image_rsos, abs(a11), abs(a22), abs(a33), f'input/input_image_{dataID}') # save nifti of image
-    gen_mask(f'input/input_image_{dataID}.nii', f'segmentations/output_mask_{dataID}.nii', dataID) # send nifti image for segmentation
+    if "face_mask" not in inputs and "brain_mask" not in inputs:
 
-    face_mask = np.load(f'segmentations/face_mask_{dataID}.npy') # load face mask
-    brain_mask = np.load(f'segmentations/brain_mask_{dataID}.npy') # load brain mask
+        niftify(og_image_rsos, abs(a11), abs(a22), abs(a33), f'input/input_image_{dataID}') # save nifti of image
+        gen_mask(f'input/input_image_{dataID}.nii.gz', f'segmentations/output_mask_{dataID}', dataID) # send nifti image for segmentation
+
+        #face_mask = np.load(f'segmentations/face_mask_{dataID}.npy') # load face mask
+        #brain_mask = np.load(f'segmentations/brain_mask_{dataID}.npy') # load brain mask
+        face_mask = nib.load(os.path.join(f'segmentations/output_mask_{dataID}', "face.nii.gz")).get_fdata()
+        brain_mask = nib.load(os.path.join(f'segmentations/output_mask_{dataID}', "brain.nii.gz")).get_fdata()
+    else:
+        print(GREEN + "Using predefined masks" + RESET)
+        face_mask = nib.load(inputs["face_mask"]).get_fdata() # load face mask
+        brain_mask = nib.load(inputs["brain_mask"]).get_fdata() # load brain mask
+
     print(GREEN + "Mask has been successfully loaded" + RESET)
 
-    maskA, maskB = set_masks(brain_mask, face_mask, gap) # apply additional masking scheme
+    #maskA, maskB = set_masks(brain_mask, face_mask, gap) # apply additional masking scheme
+    #niftify(maskA, abs(a11), abs(a22), abs(a33), f'segmentations/output_mask_{dataID}/brain2.nii.gz')
+    #niftify(maskB, abs(a11), abs(a22), abs(a33), f'segmentations/output_mask_{dataID}/face2.nii.gz')
+    maskA = brain_mask
+    maskB = face_mask
     print(GREEN + "Masks have been prepared" + RESET)
 
     nc = data.shape[-1] # get total number of original coils
@@ -195,19 +220,18 @@ if __name__ == "__main__":
     print(GREEN + "Brain and face covariance matrices have been computed" + RESET)
 
     eigenvec = rovir(nc, brain_covar, face_covar) # finding the eigenvectors for (brain_covar)v = λ(face_covar)v
+    np.save(f'results/xfm_{dataID}.npy', eigenvec)
     print(GREEN + "Eigenvectors computed" + RESET)
 
-    import matplotlib
-    matplotlib.use('Qt5Agg')
     
     # compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice) # visualize comparison between different # of coils retained
-    # show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual coils
+    #show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual coils
 
     method = inputs["threshold_method"] # load method/metric for selecting top coils
     threshold = inputs["threshold"] # load limit/requirement for selecting top coils
     
     # choose based on heuristics the number of eigenvectors to retain
-    top_eigenvec = top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold)
+    top_eigenvec = top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, inputs["plt_on"])
 
     print(f'The top nv eigenvectors contain the first {top_eigenvec} eigenvectors')
     eigenvec_retain = eigenvec[:,:top_eigenvec] # retain only the top eigenvectors 
@@ -238,7 +262,9 @@ if __name__ == "__main__":
     defaced_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(virtual_coil_data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
     defaced_image = rsos(defaced_image) # find rsos of virtual coil image data
 
-    display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, brain_retain, face_retain) # display images
+    if inputs["plt_on"]:
+        display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, brain_retain, face_retain) # display images
     
     # save nifti of results for visualization in 3DSlicer
     niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'results/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain}_face={face_retain}')
+

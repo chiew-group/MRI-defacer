@@ -65,7 +65,7 @@ def elbow_finder(nc, metric, sensitivity, curve_type, curve_direction):
     print(kneedle.elbow, metric[int(kneedle.elbow)])
     return kneedle.elbow
 
-def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold):
+def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, plt_on=False):
     '''
     Selects the top eigenvectors based on SIR, coil signal energy, coil interference energy, 
     ROI signal retention, or interference signal retention. 
@@ -135,36 +135,38 @@ def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold):
 
     xaxis = np.arange(1, nc+1)
 
-    # visualize metrics as scatterplots
-    plt.subplot(2,2,1)
-    plt.scatter(xaxis, sirs, c = "blue")
-    plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
-    plt.title("SIR of Each Virtual Coil")
-    plt.xlabel("jth Coil")
-    plt.legend()
+    if plt_on:
 
-    plt.subplot(2,2,2)
-    plt.scatter(xaxis, brain_signal, c = "green")
-    plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
-    plt.title("Signal Energy of Each Virtual Coil")
-    plt.xlabel("jth Coil")
-    plt.legend()
+        # visualize metrics as scatterplots
+        plt.subplot(2,2,1)
+        plt.scatter(xaxis, sirs, c = "blue")
+        plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
+        plt.title("SIR of Each Virtual Coil")
+        plt.xlabel("jth Coil")
+        plt.legend()
 
-    plt.subplot(2,2,3)
-    plt.scatter(xaxis, face_signal, c = "red")
-    plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
-    plt.title("Interference Energy of Each Virtual Coil")
-    plt.xlabel("jth Coil")
-    plt.legend()
-    
-    plt.subplot(2,2,4)
-    plt.scatter(np.arange(1, nc+1), np.array(brain_retain), label = "Brain Retained", c= "green")
-    plt.scatter(np.arange(1, nc+1), np.array(face_retain), label = "Face Retained", c= "red")
-    plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
-    plt.ylabel("Percentage Retained (%)"); plt.xlabel("Total Channels Retained (N)")
-    plt.legend()
-    plt.title("Brain/Face Signal Retention vs Virtual Coils Retained")
-    plt.show()
+        plt.subplot(2,2,2)
+        plt.scatter(xaxis, brain_signal, c = "green")
+        plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
+        plt.title("Signal Energy of Each Virtual Coil")
+        plt.xlabel("jth Coil")
+        plt.legend()
+
+        plt.subplot(2,2,3)
+        plt.scatter(xaxis, face_signal, c = "red")
+        plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
+        plt.title("Interference Energy of Each Virtual Coil")
+        plt.xlabel("jth Coil")
+        plt.legend()
+        
+        plt.subplot(2,2,4)
+        plt.scatter(np.arange(1, nc+1), np.array(brain_retain), label = "Brain Retained", c= "green")
+        plt.scatter(np.arange(1, nc+1), np.array(face_retain), label = "Face Retained", c= "red")
+        plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
+        plt.ylabel("Percentage Retained (%)"); plt.xlabel("Total Channels Retained (N)")
+        plt.legend()
+        plt.title("Brain/Face Signal Retention vs Virtual Coils Retained")
+        plt.show()
 
     return coil + 1 # plus 1 because slicing is not inclusive, i.e if eigenvec[:,:coil], coil is not included
 

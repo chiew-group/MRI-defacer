@@ -22,25 +22,28 @@ def gen_mask(input_fp, output_fp, saveID):
         totalsegmentator(
                         input = input_fp, 
                         output = output_fp,
-                        task = "face_mr"
+                        task = "face_mr",
+                        device = "cpu"
         )
         # calling TotalSegmentator API for brain task
         totalsegmentator(
                         input = input_fp, 
                         output = output_fp, 
                         task = "total_mr", 
-                        roi_subset = ["brain"]
+                        roi_subset = ["brain"],
+                        fast = True,
+                        device = "cpu"
         )
 
-        face_mask = nib.load(os.path.join(output_fp, "face.nii.gz"))
-        brain_mask = nib.load(os.path.join(output_fp, "brain.nii.gz"))
+        #face_mask = nib.load(os.path.join(output_fp, "face.nii.gz"))
+        #brain_mask = nib.load(os.path.join(output_fp, "brain.nii.gz"))
 
         # convert to numpy data 
-        face_mask_np = face_mask.get_fdata()
-        brain_mask_np = brain_mask.get_fdata()
+        #face_mask_np = face_mask.get_fdata()
+        #brain_mask_np = brain_mask.get_fdata()
         
         # save as numpy masks
-        np.save(f'segmentations/face_mask_{saveID}.npy', face_mask_np)
-        np.save(f'segmentations/brain_mask_{saveID}.npy', brain_mask_np)
+        #np.save(f'segmentations/face_mask_{saveID}.npy', face_mask_np)
+        #np.save(f'segmentations/brain_mask_{saveID}.npy', brain_mask_np)
 
         print(GREEN + "Mask saved successfully" + RESET)

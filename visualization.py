@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 import numpy as np 
 
@@ -125,6 +127,10 @@ def compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice):
         plt.imshow(np.rot90(image_rsos[x_slice, :, :]), cmap = 'gray', vmin = 0 , vmax = 800000000000)
     plt.show()
 
+def closest_factors(n):
+    return next((i, n // i) for i in range(int(np.sqrt(n)), 0, -1) if n % i == 0)
+
+
 def show_virtual_coils(data, eigenvec, x_slice):
     '''
     Visualizes all virtual coils individually.
@@ -141,8 +147,9 @@ def show_virtual_coils(data, eigenvec, x_slice):
     image_all_coils = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(all_coils, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
 
     # display each virtual coil's data
+    (nr, nc) = closest_factors(all_coils.shape[3])
     for coil in range(all_coils.shape[3]):
-        plt.subplot(3,4, coil+1)
+        plt.subplot(nr,nc, coil+1)
         # plt.imshow(np.abs(image_all[x_slice, :, :, coil]), cmap='gray',vmin = 0, vmax = 0.0000001)
         plt.imshow(np.abs(np.rot90(image_all_coils[x_slice, :, :, coil])), cmap='gray', vmin = 0, vmax = 200000000000)
         plt.axis('off')
