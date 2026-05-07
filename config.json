@@ -1,5 +1,5 @@
 {
-    "data_path": "input/example.npy",
+    "data_path": "input/test01.npy",
     "data_id": "example",
     "x_slice": 80,
     "y_slice": 80,
@@ -10,5 +10,6 @@
     "x_y_z_channel": [0, 1, 2, 3],
     "a11": 1, 
     "a22": 1,
-    "a33": 1
+    "a33": 1,
+    "plt_on": false
 }
