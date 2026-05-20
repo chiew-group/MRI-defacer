@@ -141,16 +141,15 @@ if __name__ == "__main__":
         inputs = json.load(config_file)
 
     # loading the numpy raw k-space data and data ID
-    data = np.load(inputs["data_path"]) 
-    data = np.array(data, dtype=np.complex64) #REMOVE 
-    dataID = inputs["data_id"]
+    data = np.load(inputs["input_data"]["data_path"]) 
+    dataID = inputs["input_data"]["data_id"]
 
     print(GREEN + "Data has been successfully loaded" + RESET)
 
     # flipping data based on affine
-    a11 = float(inputs["a11"])
-    a22 = float(inputs["a22"])
-    a33 = float(inputs["a33"])
+    a11 = float(inputs["input_data"]["a11"])
+    a22 = float(inputs["input_data"]["a22"])
+    a33 = float(inputs["input_data"]["a33"])
 
     if a11 < 0: 
         data = data[::-1, :, :, :]
@@ -162,15 +161,15 @@ if __name__ == "__main__":
         data = data[:, :, ::-1, :]
 
     # moving data axes to (x, y, z, ch) shape
-    x_y_z_ch = inputs["x_y_z_channel"]
+    x_y_z_ch = inputs["input_data"]["x_y_z_channel"]
     sorted_ind = np.argsort(x_y_z_ch)
     data = np.moveaxis(data, [0, 1, 2, 3], sorted_ind) 
 
     # defining image slices to visualize  
     try:
-        x_slice = int(inputs["x_slice"])
-        y_slice = int(inputs["y_slice"])
-        z_slice = int(inputs["z_slice"])
+        x_slice = int(inputs["visualization"]["x_slice"])
+        y_slice = int(inputs["visualization"]["y_slice"])
+        z_slice = int(inputs["visualization"]["z_slice"])
     except ValueError:
         print(RED + "One of your slices is not a valid integer. Change in config.json." + RESET)
         exit()
@@ -188,7 +187,7 @@ if __name__ == "__main__":
         exit()
 
     try:
-        gap = int(inputs["gap"])
+        gap = int(inputs["masks"]["gap"])
     except ValueError:
         print(RED + "Your gap is not a valid integer. Change in config.json." + RESET)
         exit()
@@ -199,7 +198,7 @@ if __name__ == "__main__":
     og_image_rsos = rsos(og_image) # calculate rsos of image
 
 
-    if "face_mask" not in inputs and "brain_mask" not in inputs: #CHECK WHAT HAPPENS WHEN ONLY ONE IS SPECIFIED, CAN YOU FIND A B WITHOUT ONE 
+    if "face_mask" not in inputs["masks"] and "brain_mask" not in inputs["masks"]: #CHECK WHAT HAPPENS WHEN ONLY ONE IS SPECIFIED, CAN YOU FIND A B WITHOUT ONE 
 
         niftify(og_image_rsos, abs(a11), abs(a22), abs(a33), f'input/input_image_{dataID}') # save nifti of image
         gen_mask(f'input/input_image_{dataID}.nii.gz', f'segmentations/output_mask_{dataID}', dataID) # send nifti image for segmentation
@@ -211,8 +210,8 @@ if __name__ == "__main__":
     
     else: # using predefined masks
         print(GREEN + "Using predefined masks" + RESET)
-        face_mask = nib.load(inputs["face_mask"]).get_fdata() # load face mask
-        brain_mask = nib.load(inputs["brain_mask"]).get_fdata() # load brain mask
+        face_mask = nib.load(inputs["masks"]["face_mask"]).get_fdata() # load face mask
+        brain_mask = nib.load(inputs["masks"]["brain_mask"]).get_fdata() # load brain mask
 
     print(GREEN + "Mask has been successfully loaded" + RESET)
 
@@ -234,11 +233,11 @@ if __name__ == "__main__":
     # compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice) # visualize comparison between different # of coils retained
     #show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual coils
 
-    method = inputs["threshold_method"] # load method/metric for selecting top coils
-    threshold = inputs["threshold"] # load limit/requirement for selecting top coils
+    method = inputs["coil_selection"]["threshold_method"] # load method/metric for selecting top coils
+    threshold = inputs["coil_selection"]["threshold_value"] # load limit/requirement for selecting top coils
     
     # choose based on heuristics the number of eigenvectors to retain
-    top_eigenvec = top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, inputs["plt_on"])
+    top_eigenvec = top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, inputs["visualization"]["plt_on"])
 
     print(f'The top nv eigenvectors contain the first {top_eigenvec} eigenvectors')
     eigenvec_retain = eigenvec[:,:top_eigenvec] # retain only the top eigenvectors 
@@ -260,7 +259,7 @@ if __name__ == "__main__":
     print(GREEN + f'Virtual coils successfully formed' + RESET)
 
     # save final defaced raw data
-    if inputs["save_defaced_kspace"] == True:
+    if inputs["output"]["save_defaced_kspace"] == True:
         np.save(f'results/defaced_{dataID}.npy', virtual_coil_data)
 
     ####################################################################
@@ -270,10 +269,10 @@ if __name__ == "__main__":
     defaced_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(virtual_coil_data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
     defaced_image = rsos(defaced_image) # find rsos of virtual coil image data
 
-    if inputs["plt_on"]:
+    if inputs["visualization"]["plt_on"]:
         display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, brain_retain, face_retain) # display images
     
     # save nifti of results for visualization in 3DSlicer
-    if inputs["save_defaced_image"] == True:
+    if inputs["output"]["save_defaced_image"] == True:
         niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'results/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain}_face={face_retain}')
 
