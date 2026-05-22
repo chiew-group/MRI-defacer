@@ -236,8 +236,11 @@ if __name__ == "__main__":
     method = inputs["coil_selection"]["threshold_method"] # load method/metric for selecting top coils
     threshold = inputs["coil_selection"]["threshold_value"] # load limit/requirement for selecting top coils
     
-    # choose based on heuristics the number of eigenvectors to retain
-    top_eigenvec = top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, inputs["visualization"]["plt_on"])
+    if "top_coils" not in inputs["coil_selection"]: # choose based on heuristics the number of eigenvectors to retain
+        top_eigenvec = top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, inputs["visualization"]["plt_on"])
+    
+    else: # if user specifies the number of top virtual coils to keep, use that 
+        top_eigenvec = inputs["coil_selection"]["top_coils"]
 
     print(f'The top nv eigenvectors contain the first {top_eigenvec} eigenvectors')
     eigenvec_retain = eigenvec[:,:top_eigenvec] # retain only the top eigenvectors 
