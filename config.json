@@ -1,17 +1,24 @@
 {
-    "data_path": "input/test03.npy",
-    "data_id": "03x",
-    "x_slice": 80,
-    "y_slice": 80,
-    "z_slice": 120,
-    "threshold_method": "face_retained",
-    "threshold": 10,
-    "gap": 10, 
-    "x_y_z_channel": [0, 1, 2, 3],
-    "a11": 1, 
-    "a22": 1,
-    "a33": -1,
-    "plt_on": false,
-    "face_mask": "segmentations/output_mask_03/face.nii.gz",
-    "brain_mask": "segmentations/output_mask_03/brain.nii.gz"
+    "input_data": {"data_path": "input/test03.npy",
+                    "data_id": "03x",
+                    "x_y_z_channel": [0, 1, 2, 3],
+                    "a11": 1, 
+                    "a22": 1,
+                    "a33": -1},
+
+    "visualization": {"x_slice": 80,
+                    "y_slice": 80,
+                    "z_slice": 120,
+                    "plt_on": false},
+
+    "coil_selection": {"threshold_method": "face_retained",
+            "threshold_value": 10},
+
+    "masks": {"face_mask": "segmentations/output_mask_03/face.nii.gz",
+            "brain_mask": "segmentations/output_mask_03/brain.nii.gz",
+            "gap": 10},
+
+    "output":{"save_defaced_kspace": true,
+            "save_defaced_image": true}
+
 }
