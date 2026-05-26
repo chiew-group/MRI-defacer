@@ -86,9 +86,9 @@ Rather than manually achieving the expected orientation, you can specify in the 
 | show_virtual_coils| boolean       | option to visualize individual virtual coils          | 
 | threshold_method  | string        | 'SIR', 'brain_retain', 'face_retain' *    | 
 | threshold_value   | int or null   | see explanation below *                   |
-| top_coils         | int           | option to                    |
-| face_mask         | string        |                    |
-| brain_mask        | string        |                    |
+| top_coils         | int           | option to manually select top virtual coils                    |
+| face_mask         | string        | optional predefined face mask provided by user                   |
+| brain_mask        | string        | optional predfined brain mask provided by user                  |
 | manipulation      | string        | specify manipulation scheme for segmentation results * | 
 | gap               | int           | size of gap between face and brain mask * | 
 | save_defaced_kspace | boolean     | option to save defaced k-space data to resulsts folder as a numpy array| 
@@ -123,6 +123,9 @@ This parameters specifies the amount times the face mask is shrunk to create a g
 
 #### 4. x_y_z_channel | default = [0, 1, 2, 3]
 If the current shape of the data is not the required data.shape = (x, y, z, ch), the user can specify how the current data shape maps to the required data shape using a list. The first element specifies the current index of the x-axis in data.shape, the second element specifies the current index of the y-axis in data.shape, the third element specifies the current index of the z-axis in data.shape, and the fourth element specifies the current index of the channel dimension in data.shape. For example, if **x_y_z_channel = [2, 0, 1, 3]** is specified, it means the current axis 0 corresponds to y, the current axis 1 corresponds to z, the current axis 2 corresponds to x, and the current axis 3 corresponds to channels (i.e. data.shape = (y, z, x, ch)).  
+
+#### 5. manipulation | default = "A"
+The user may want to take the raw output from the segmentation (in which case the manipulation parameter can be omitted), or explore the different mask manipulation schemes shown in the image below. With our 64-channel dataset, manipulation = "A" is the mask manipulation scheme that resulted in the desired defacing aggressiveness and brain signal retention. 
 
 ## Example Usage
 After running main.py, the final defaced k-space data should exist in a folder named **results** as **defaced_{dataID}.npy**. You can see example outputs in the [demo.ipynb](demo.ipynb) Notebook. The example uses a fully sampled 12-channel dataset from Calgary Campinas [[3]](#3-r-souza-et-al-an-open-multi-vendor-multi-field-strength-brain-mr-dataset-and-analysis-of-publicly-available-skull-stripping-methods-agreement-neuroimage-vol-170-pp-482494-apr-2018-doi-httpsdoiorg101016jneuroimage201708021) preprocessed to be oriented as outlined in [Expected Input](#expected-input) and our default parameters in config.json. 
