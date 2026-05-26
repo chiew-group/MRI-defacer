@@ -124,7 +124,7 @@ If the current shape of the data is not the required data.shape = (x, y, z, ch),
 ## Example Usage
 After running main.py, the final defaced k-space data should exist in a folder named **results** as **defaced_{dataID}.npy**. You can see example outputs in the [demo.ipynb](demo.ipynb) Notebook. The example uses a fully sampled 12-channel dataset from Calgary Campinas [[3]](#3-r-souza-et-al-an-open-multi-vendor-multi-field-strength-brain-mr-dataset-and-analysis-of-publicly-available-skull-stripping-methods-agreement-neuroimage-vol-170-pp-482494-apr-2018-doi-httpsdoiorg101016jneuroimage201708021) preprocessed to be oriented as outlined in [Expected Input](#expected-input) and our default parameters in config.json. 
 
-The example uses a fully sample 64-channel dataset that can be found with the following doi: 10.5281/zenodo.20393645. 
+The example uses a fully sample 64-channel dataset that can be found here: https://huggingface.co/datasets/lyx228/Fully_Sampled_MRI/tree/main. 
 
 
 ## More Options for Developers & Troubleshooting
