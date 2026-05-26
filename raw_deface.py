@@ -1,6 +1,5 @@
 import json
 import os
-import argparse
 
 import nibabel as nib
 
@@ -9,6 +8,7 @@ from scipy.linalg import orth
 from scipy.linalg import norm
 
 from skimage.morphology import convex_hull_image 
+from skimage.morphology import binary_erosion 
 
 from ROVir import rovir
 from ROVir import top_nv
@@ -20,6 +20,7 @@ from visualization import show_virtual_coils
 
 from to_nifti import niftify
 from automask import gen_mask
+
 
 RED = '\033[91m'
 GREEN = '\033[92m'
@@ -60,7 +61,7 @@ def set_masks(ROI, interference, gap=10):
         maskB -> np.ndarray: a 3D array of the face region simplified 
 
     '''
-
+    ##### OPTION A
     # simplify shape using convex hull
     maskA = convex_hull_image(ROI).astype(int)
     maskB = convex_hull_image(interference).astype(int)
@@ -83,8 +84,44 @@ def set_masks(ROI, interference, gap=10):
         maskB[:, ymin_face, :] = 0
         maskB[:, :, zmax_face] = 0
 
-    return(maskA, maskB)
+    # ##### OPTION B
+        
+    # # simplify shape using convex hull
+    # maskA = convex_hull_image(ROI).astype(int)
+    # maskB = convex_hull_image(interference).astype(int)
+    # # perform binary erosion until overlap is gone
+    # overlap = maskA.astype(bool) & maskB.astype(bool) 
+    # while np.count_nonzero(overlap) != 0:
+    #     maskA = binary_erosion(maskA).astype(int)
+    #     maskB = binary_erosion(maskB).astype(int)
 
+    # ##### OPTION C
+    # x_roi, y_roi, z_roi = np.where(ROI)
+    
+    # # get min and max brain index for each direction
+    # xmin, xmax = np.min(x_roi), np.max(x_roi)
+    # ymin, ymax = np.min(y_roi), np.max(y_roi)
+    # zmin, zmax = np.min(z_roi), np.max(z_roi)
+    
+    # # create box mask for brain
+    # maskA = np.zeros_like(ROI)
+    # maskA[xmin:xmax+1, ymin:ymax+1, zmin:zmax+1] = 1
+
+    # x_face, y_face, z_face = np.where(interference)
+    
+    # # get min and max face index for each direction
+    # xmin, xmax = np.min(x_face), np.max(x_face)
+    # ymin, ymax = np.min(y_face), np.max(y_face)
+    # zmin, zmax = np.min(z_face), np.max(z_face)
+    
+    # # create box mask for face
+    # maskB = np.zeros_like(ROI)
+    # maskB[xmin:xmax+1, ymin:ymax+1, zmin:zmax+1] = 1
+
+    # overlap = maskA & maskB
+    # maskB = (maskB & ~overlap).astype(int)
+    
+    # return maskA, maskB
 
 def make_A_B(image, nc, maskA, maskB):
     '''
@@ -124,20 +161,15 @@ def make_A_B(image, nc, maskA, maskB):
     # print(np.linalg.matrix_rank(B)) # checking rank of B
 
     return (A, B)
-    
-if __name__ == "__main__": 
+
+def run_raw_deface(config='config.json'):
     matplotlib.use('Qt5Agg')
     os.makedirs('input', exist_ok = True)
     os.makedirs('segmentations', exist_ok = True)
     os.makedirs('results', exist_ok = True)
 
-    # command-line argument parser for user to specify config file 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='config.json', help='Path to config json file')
-    args = parser.parse_args()
-
     # loading inputs from config file
-    with open(args.config, 'r') as config_file:
+    with open(config, 'r') as config_file:
         inputs = json.load(config_file)
 
     # loading the numpy raw k-space data and data ID
@@ -185,6 +217,42 @@ if __name__ == "__main__":
     if z_slice >= data.shape[2] or z_slice < -data.shape[2]:
         print(RED + f"Your z slice is out of bounds for image shape: {data.shape}"  + RESET)
         exit()
+    
+    # fourier transform and shift data 
+    og_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
+    og_image_rsos = rsos(og_image) # calculate rsos of image
+
+
+###
+    if "reference_data" in inputs: 
+        ref_data = np.load(inputs["reference_data"]["data_path"])
+        ref_dataID = np.load(inputs["reference_data"]["data_id"])
+
+        print(GREEN + "Reference data has been successfully loaded" + RESET)
+
+        # flipping data based on affine
+        a11_ref = float(inputs["reference_data"]["a11"])
+        a22_ref = float(inputs["reference_data"]["a22"])
+        a33_ref = float(inputs["reference_data"]["a33"])
+
+        if a11_ref < 0: 
+            ref_data = ref_data[::-1, :, :, :]
+
+        if a22_ref < 0:
+            ref_data = ref_data[:, ::-1, :, :]
+
+        if a33_ref < 0:
+            ref_data = ref_data[:, :, ::-1, :]
+
+        # moving data axes to (x, y, z, ch) shape
+        x_y_z_ch_ref = inputs["reference_data"]["x_y_z_channel"]
+        sorted_ind_ref = np.argsort(x_y_z_ch_ref)
+        ref_data = np.moveaxis(data, [0, 1, 2, 3], sorted_ind_ref) 
+        
+        # fourier transform and shift data 
+        ref_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(ref_data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
+        ref_image_rsos = rsos(ref_image) # calculate rsos of image
+###
 
     try:
         gap = int(inputs["masks"]["gap"])
@@ -192,16 +260,16 @@ if __name__ == "__main__":
         print(RED + "Your gap is not a valid integer. Change in config.json." + RESET)
         exit()
 
-    
-    # fourier transform and shift data 
-    og_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
-    og_image_rsos = rsos(og_image) # calculate rsos of image
+    if "face_mask" not in inputs["masks"] and "brain_mask" not in inputs["masks"]: 
 
+        if "reference_data" in inputs:
+            dataID = ref_dataID
+            niftify(ref_image_rsos, abs(a11), abs(a22), abs(a33), f'input/input_image_{dataID}') # save nifti of image
+            gen_mask(f'input/input_image_{dataID}.nii.gz', f'segmentations/output_mask_{dataID}', dataID) # send nifti image for segmentation
 
-    if "face_mask" not in inputs["masks"] and "brain_mask" not in inputs["masks"]: #CHECK WHAT HAPPENS WHEN ONLY ONE IS SPECIFIED, CAN YOU FIND A B WITHOUT ONE 
-
-        niftify(og_image_rsos, abs(a11), abs(a22), abs(a33), f'input/input_image_{dataID}') # save nifti of image
-        gen_mask(f'input/input_image_{dataID}.nii.gz', f'segmentations/output_mask_{dataID}', dataID) # send nifti image for segmentation
+        else:
+            niftify(og_image_rsos, abs(a11), abs(a22), abs(a33), f'input/input_image_{dataID}') # save nifti of image
+            gen_mask(f'input/input_image_{dataID}.nii.gz', f'segmentations/output_mask_{dataID}', dataID) # send nifti image for segmentation
 
         #face_mask = np.load(f'segmentations/face_mask_{dataID}.npy') # load face mask
         #brain_mask = np.load(f'segmentations/brain_mask_{dataID}.npy') # load brain mask
@@ -215,11 +283,15 @@ if __name__ == "__main__":
 
     print(GREEN + "Mask has been successfully loaded" + RESET)
 
-    #maskA, maskB = set_masks(brain_mask, face_mask, gap) # apply additional masking scheme
-    #niftify(maskA, abs(a11), abs(a22), abs(a33), f'segmentations/output_mask_{dataID}/brain2.nii.gz')
-    #niftify(maskB, abs(a11), abs(a22), abs(a33), f'segmentations/output_mask_{dataID}/face2.nii.gz')
-    maskA = brain_mask
-    maskB = face_mask
+    if inputs["masks"]["manipulation"] == True: # select and apply mask manipulation scheme
+        maskA, maskB = set_masks(brain_mask, face_mask, gap) # apply additional masking scheme
+        niftify(maskA, abs(a11), abs(a22), abs(a33), f'segmentations/output_mask_{dataID}/brain2.nii.gz')
+        niftify(maskB, abs(a11), abs(a22), abs(a33), f'segmentations/output_mask_{dataID}/face2.nii.gz')
+
+    else:
+        maskA = brain_mask
+        maskB = face_mask
+
     print(GREEN + "Masks have been prepared" + RESET)
 
     nc = data.shape[-1] # get total number of original coils
@@ -230,8 +302,10 @@ if __name__ == "__main__":
     np.save(f'results/xfm_{dataID}.npy', eigenvec)
     print(GREEN + "Eigenvectors computed" + RESET)
     
-    # compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice) # visualize comparison between different # of coils retained
-    #show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual coils
+    if inputs["visualization"]["compare_retention"] == True:
+        compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice) # visualize comparison between different # of coils retained
+    if inputs["visualization"]["show_virtual_coils"] == True:
+        show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual coils
 
     method = inputs["coil_selection"]["threshold_method"] # load method/metric for selecting top coils
     threshold = inputs["coil_selection"]["threshold_value"] # load limit/requirement for selecting top coils
@@ -279,3 +353,11 @@ if __name__ == "__main__":
     if inputs["output"]["save_defaced_image"] == True:
         niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'results/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain}_face={face_retain}')
 
+if __name__ == "__main__": 
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default='config.json', help='Path to config json file')
+    args = parser.parse_args()
+
+    run_raw_deface(args.config)
