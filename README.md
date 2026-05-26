@@ -1,9 +1,9 @@
-# MRI Defacer
+# MR RawDeface
 ![banner](assets/banner.png)
-MRI Defacer is a tool for defacing multi-channel raw 3D MRI brain data. Instead of defacing reconstructed images which permanently alters the raw k-space data, MRI Defacer defaces in k-space to preserve the raw data. This defaced data can then be used and shared for reconstruction research, where having true raw data and protecting the privacy of participants is important.
+MR RawDeface is a tool for defacing multi-channel raw 3D MRI brain data. Instead of defacing reconstructed images which permanently alters the raw k-space data, MR RawDeface defaces in k-space to preserve the raw data. This defaced data can then be used and shared for reconstruction research, for which both preserving raw data's integrity and protecting the privacy of participants are important.
 
 ### Brief Pipeline Overview
-We use the region-optmized virtual coils (ROVir) [[1]](#1-kim-d-cauley-sf-nayak-ks-leahy-rm-haldar-jp-region--optimized-virtual-rovir-coils-localization-andor-suppression-of-spatial-regions-using-sensor--domain-beamforming-magn-reson-med-202186197212-httpsdoiorg101002mrm28706) framework to locally supress facial signal in k-space. Here are the steps we take: <br/>
+We use the region-optmized virtual coils (ROVir) [[1]](#1-kim-d-cauley-sf-nayak-ks-leahy-rm-haldar-jp-region--optimized-virtual-rovir-coils-localization-andor-suppression-of-spatial-regions-using-sensor--domain-beamforming-magn-reson-med-202186197212-httpsdoiorg101002mrm28706) framework to locally supress facial signal in k-space. We take the following steps in this pipeline: <br/>
 
 (1) We make an initial reconstruction to define the brain and face regions.
 
@@ -11,15 +11,15 @@ We use the region-optmized virtual coils (ROVir) [[1]](#1-kim-d-cauley-sf-nayak-
 
 (3) We define a ROVir transform based on these masks. This transform mixes the original measurement coils to form virtual coils, with signal concentrated in either the brain or face regions. You can see the effect in [demo.ipynb](demo.ipynb), where the virtual coils are displayed.
 
-(4) We retain only the top virtual coils with only high brain region signal and discard the virtual coils that have high face region signal. Combining only the top virtual coils yields defaced k-sapce data. 
+(4) We retain only the top virtual coils with only high brain region signal and discard the virtual coils that have high face region signal. Combining only the top virtual coils yields defaced k-space data. 
 
 The benefit of this pipeline is that we act on the coil dimension, discarding only coils with high face region signal, thus preserving raw k-space data. Currently, we have evaluated the pipeline using 14 sets of 12-channel data from Calgary Campinas [[3]](#3-r-souza-et-al-an-open-multi-vendor-multi-field-strength-brain-mr-dataset-and-analysis-of-publicly-available-skull-stripping-methods-agreement-neuroimage-vol-170-pp-482494-apr-2018-doi-httpsdoiorg101016jneuroimage201708021) and one in-house obtained 48-channel dataset. On avergae, we saw a 64.3% brain retention and 1.5% face retention in the 12-channel datasets. For the 48-channel dataset, there was a 89% brain retention and 1.8% face retention. The number of channels your data has may affect the defacing abilities. 
 
 ## Installation and Usage
-Set up a Python environment for MRI Defacer
+Set up a Python environment for MR RawDeface
 
 ```
-conda create -n MRIDEFACER python=3.13
+conda create -n RawDeface python=3.13
 ```
 
 Install TotalSegmentator and the following required dependencies
@@ -49,14 +49,24 @@ cd MRI-defacer
 
 **Note:** our pipeline uses the face_mr task from TotalSegmentator, which requires a free non-commercial use license. You must obtain and activate the license before using this tool. You can find out how to do so from the TotalSegmentator repository [[2]](#2-wasserthal-j-breit-h-c-meyer-mt-pradella-m-hinck-d-sauter-aw-heye-t-boll-d-cyriac-j-yang-s-bach-m-segeroth-m-2023-totalsegmentator-robust-segmentation-of-104-anatomic-structures-in-ct-images-radiology-artificial-intelligence-httpsdoiorg101148ryai230024).
 
-After cloning the repository, head to the [config.json](config.json) file to specify your inputs. A description of each field can be found in the [Expected Input](#expected-input) section. Then, run the [main.py](main.py) file. Given the expected input formats, this tool is fully automated. The output is the defaced raw k-space data.
+After cloning the repository, create config file(s) to specify your inputs. See [config.json](config.json) for the expected file structure. A description of each field can be found in the [Expected Input](#expected-input) section. Then, use the following command to run the program:
+```
+python raw_deface.py --config config.json
+```
+If the config file is not specified by the user, the pipeline will use the default [config.json](config.json) file. Given the expected input formats, this tool is fully automated. The output is the defaced raw k-space data.
 
 ## Expected Input
 
 ### Orientation of Data
-The format of the k-space data is expected to have the shape (x, y, z, channel), where the x-axis corresponds to sagittal slices, y-axis corresponds to coronal slices, and z-axis corresponds to axial slices. In addition, the voxel spacings are expected to be positive (e.g., +1mm). Here is how the expected orientation looks displayed using Matplotlib (i.e. displaying a slice image[x_slice, :, :]):
+
+The image shape and affine matrix of the user's dataset must be specified in the config.json file for the program to handle the orientation correctly. 
+
+The format of the k-space data is expected to have the shape (x, y, z, channel), where the x-axis corresponds to sagittal slices, y-axis corresponds to coronal slices, and z-axis corresponds to axial slices. 
+
+In addition, the voxel spacings are expected to be positive (e.g., +1mm). Here is how the expected orientation looks displayed using Matplotlib (i.e. displaying a slice image[x_slice, :, :]):
 ![expected orientation](assets/input_orientation.png)
-Alternatively, you can specify in the config.json file what your current image shape and voxel spacings are, and the program will handle it. The default shape is (x, y, z, channel) and the default voxel spacings are +1mm.
+
+Rather than manually achieving the expected orientation, you can specify in the config.json file what your current image shape and voxel spacings are, and the program will handle it. The default shape is (x, y, z, channel) and the default voxel spacings are +1mm.
 
 ### Input Parameters
 
@@ -64,17 +74,33 @@ Alternatively, you can specify in the config.json file what your current image s
 | -------------     | ------------- | -------------                             | 
 | data_path         | string        | path to raw 4D numpy k-space data         |
 | data_id           | string        | ID for data ouput paths                   |
-| x_slice           | int           | slice number for sagittal view            | 
-| y_slice           | int           | slice number for coronal view             |
-| z_slice           | int           | slice number for axial view               |
-| threshold_method  | string        | 'SIR', 'brain_retain', 'face_retain' *    | 
-| threshold         | int or null   | see explanation below *                   |
-| gap               | int           | size of gap between face and brain mask * | 
 | x_y_z_channel     | list          | see explanation below *                   | 
 | a11               | float         | x-axis image voxel resolution (millimeters)| 
 | a22               | float         | y-axis image voxel resolution (millimeters)| 
 | a33               | float         | z-axis image voxel resolution (millimeters)| 
+| x_slice           | int           | slice number for sagittal view            | 
+| y_slice           | int           | slice number for coronal view             |
+| z_slice           | int           | slice number for axial view               |
+| plt_on            | boolean       | option to visualize defaced image         | 
+| threshold_method  | string        | 'SIR', 'brain_retain', 'face_retain' *    | 
+| threshold_value   | int or null   | see explanation below *                   |
+| top_coils         | int           | option to                    |
+| face_mask         | string        |                    |
+| brain_mask        | string        |                    |
+| gap               | int           | size of gap between face and brain mask * | 
+| save_defaced_kspace | boolean     | option to save defaced k-space data to results folder as a numpy array| 
+| save_defaced_image  | boolean     | option to save defaced k-space data to results folder as a NIfTI file | 
 
+If `top_coils` is not specified, then the selected `threshold_method` and the corresponding `threshold_value` will be used as a heuristic for determining the top virtual coils to form the defaced data. Additionally, the user can optionally provide their own `face_mask` and `brain_mask`. If these are not specified, then the segmentation tool implemented in this pipeline will compute a face and brain mask. The user can also optionally provide the `data_path`, `data_id`, channel, and affine elements of a reference dataset to generate the face and brain masks, which will be applied on the target dataset for defacing. Simply add the following lines to the config.json file:
+
+```
+    "reference_data": {"data_path": "input/example.npy",
+                    "data_id": "reference",
+                    "x_y_z_channel": [0, 1, 2, 3],
+                    "a11": 1, 
+                    "a22": 1,
+                    "a33": -1},
+```
 
 ### Further Explanation of Select Input Parameters *
 #### 1. threshold_method | default = 'face_retain'
@@ -83,8 +109,8 @@ This parameters specifices the quantitative metric used to select the top virtua
 (B) if **'brain_retain'** is chosen, the percentage signal left from the brain region defined by the automated masking as a function of the number of virtual coils retained is used to choose the top coils. A high brain retention is desirable. <br/><br/>
 (C) if **'face_retain'** is chosen, the percentage signal left from the face region defined by the automated masking as a function of the number of virtual coils retained is used to choose the top coils. A low face retention is desirable.
 
-#### 2. threshold | default = 2
-This parameter specifies a heuristic for choosing the top virtual coils. We again recommend you to use the default of 2 along with the default **threshold_method**. For example, if **threshold_method = 'face_retain'** and **threshold = '2'**, then the tool retains virtual coils, starting from those with highest brain signal, until a maximum 2% face signal is retained. You can also set **threshold = null**, in which case the tool will use an elbow-finding algorithm to choose the top virtual coils based on the curves formed by the metrics. <br/><br/>
+#### 2. threshold_value | default = 2
+This parameter specifies a heuristic for choosing the top virtual coils. We again recommend you to use the default of 2 along with the default **threshold_method**. For example, if **threshold_method = 'face_retain'** and **threshold_value = '2'**, then the tool retains virtual coils, starting from those with highest brain signal, until a maximum 2% face signal is retained. You can also set **threshold_value = null**, in which case the tool will use an elbow-finding algorithm to choose the top virtual coils based on the curves formed by the metrics. <br/><br/>
 
 Here is an example of the curves generated from each **threshold_method** for your reference if you choose to experiment with these parameters: 
 ![metrics](assets/metrics.png)
@@ -97,6 +123,9 @@ If the current shape of the data is not the required data.shape = (x, y, z, ch),
 
 ## Example Usage
 After running main.py, the final defaced k-space data should exist in a folder named **results** as **defaced_{dataID}.npy**. You can see example outputs in the [demo.ipynb](demo.ipynb) Notebook. The example uses a fully sampled 12-channel dataset from Calgary Campinas [[3]](#3-r-souza-et-al-an-open-multi-vendor-multi-field-strength-brain-mr-dataset-and-analysis-of-publicly-available-skull-stripping-methods-agreement-neuroimage-vol-170-pp-482494-apr-2018-doi-httpsdoiorg101016jneuroimage201708021) preprocessed to be oriented as outlined in [Expected Input](#expected-input) and our default parameters in config.json. 
+
+The example uses a fully sample 64-channel dataset that can be found with the following doi: 10.5281/zenodo.20393645. 
+
 
 ## More Options for Developers & Troubleshooting
 
