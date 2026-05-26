@@ -82,13 +82,16 @@ Rather than manually achieving the expected orientation, you can specify in the 
 | y_slice           | int           | slice number for coronal view             |
 | z_slice           | int           | slice number for axial view               |
 | plt_on            | boolean       | option to visualize defaced image         | 
+| compare_retention | boolean       | option to visualize defacing effect for different coil retention strength | 
+| show_virtual_coils| boolean       | option to visualize individual virtual coils          | 
 | threshold_method  | string        | 'SIR', 'brain_retain', 'face_retain' *    | 
 | threshold_value   | int or null   | see explanation below *                   |
 | top_coils         | int           | option to                    |
 | face_mask         | string        |                    |
 | brain_mask        | string        |                    |
+| manipulation      | string        | specify manipulation scheme for segmentation results * | 
 | gap               | int           | size of gap between face and brain mask * | 
-| save_defaced_kspace | boolean     | option to save defaced k-space data to results folder as a numpy array| 
+| save_defaced_kspace | boolean     | option to save defaced k-space data to resulsts folder as a numpy array| 
 | save_defaced_image  | boolean     | option to save defaced k-space data to results folder as a NIfTI file | 
 
 If `top_coils` is not specified, then the selected `threshold_method` and the corresponding `threshold_value` will be used as a heuristic for determining the top virtual coils to form the defaced data. Additionally, the user can optionally provide their own `face_mask` and `brain_mask`. If these are not specified, then the segmentation tool implemented in this pipeline will compute a face and brain mask. The user can also optionally provide the `data_path`, `data_id`, channel, and affine elements of a reference dataset to generate the face and brain masks, which will be applied on the target dataset for defacing. Simply add the following lines to the config.json file:
