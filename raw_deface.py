@@ -44,7 +44,7 @@ def rsos(image):
     return np.sqrt(np.sum(np.abs(image)**2, axis=3))
 
 
-def set_masks(ROI, interference, gap=10):
+def set_masks(ROI, interference, option, gap=10):
 
     '''
     Manipulates the segmentation outputs to simplify shape. 
@@ -61,39 +61,42 @@ def set_masks(ROI, interference, gap=10):
         maskB -> np.ndarray: a 3D array of the face region simplified 
 
     '''
-    ##### OPTION A
-    # simplify shape using convex hull
-    maskA = convex_hull_image(ROI).astype(int)
-    maskB = convex_hull_image(interference).astype(int)
 
-    # get rid of overlap between masks by shrinking face mask
-    overlap = maskA.astype(bool) & maskB.astype(bool) 
-    while np.count_nonzero(overlap) != 0:
-        _, y_face_true, z_face_true = np.nonzero(maskB) # find indices where face mask is nonzero
-        zmax_face = np.max(z_face_true) # find top of face mask (closest to brain)
-        ymin_face = np.min(y_face_true) # find edge of face mask (closest to neck)
-        maskB[:, ymin_face, :] = 0 
-        maskB[:, :, zmax_face] = 0
+    if option == "A":
+        ##### OPTION A
+        # simplify shape using convex hull
+        maskA = convex_hull_image(ROI).astype(int)
+        maskB = convex_hull_image(interference).astype(int)
+
+        # get rid of overlap between masks by shrinking face mask
         overlap = maskA.astype(bool) & maskB.astype(bool) 
+        while np.count_nonzero(overlap) != 0:
+            _, y_face_true, z_face_true = np.nonzero(maskB) # find indices where face mask is nonzero
+            zmax_face = np.max(z_face_true) # find top of face mask (closest to brain)
+            ymin_face = np.min(y_face_true) # find edge of face mask (closest to neck)
+            maskB[:, ymin_face, :] = 0 
+            maskB[:, :, zmax_face] = 0
+            overlap = maskA.astype(bool) & maskB.astype(bool) 
 
-    # create addition gap by shrinking face mask
-    for _ in range(gap):
-        _, y_face_true, z_face_true = np.nonzero(maskB)
-        zmax_face = np.max(z_face_true)
-        ymin_face = np.min(y_face_true)
-        maskB[:, ymin_face, :] = 0
-        maskB[:, :, zmax_face] = 0
+        # create addition gap by shrinking face mask
+        for _ in range(gap):
+            _, y_face_true, z_face_true = np.nonzero(maskB)
+            zmax_face = np.max(z_face_true)
+            ymin_face = np.min(y_face_true)
+            maskB[:, ymin_face, :] = 0
+            maskB[:, :, zmax_face] = 0
 
-    # ##### OPTION B
+    if option == "B":
+    ##### OPTION B
         
-    # # simplify shape using convex hull
-    # maskA = convex_hull_image(ROI).astype(int)
-    # maskB = convex_hull_image(interference).astype(int)
-    # # perform binary erosion until overlap is gone
-    # overlap = maskA.astype(bool) & maskB.astype(bool) 
-    # while np.count_nonzero(overlap) != 0:
-    #     maskA = binary_erosion(maskA).astype(int)
-    #     maskB = binary_erosion(maskB).astype(int)
+        # simplify shape using convex hull
+        maskA = convex_hull_image(ROI).astype(int)
+        maskB = convex_hull_image(interference).astype(int)
+        # perform binary erosion until overlap is gone
+        overlap = maskA.astype(bool) & maskB.astype(bool) 
+        while np.count_nonzero(overlap) != 0:
+            maskA = binary_erosion(maskA).astype(int)
+            maskB = binary_erosion(maskB).astype(int)
 
     # ##### OPTION C
     # x_roi, y_roi, z_roi = np.where(ROI)
@@ -121,7 +124,7 @@ def set_masks(ROI, interference, gap=10):
     # overlap = maskA & maskB
     # maskB = (maskB & ~overlap).astype(int)
     
-    # return maskA, maskB
+    return maskA, maskB
 
 def make_A_B(image, nc, maskA, maskB):
     '''
@@ -283,7 +286,7 @@ def run_raw_deface(config='config.json'):
 
     print(GREEN + "Mask has been successfully loaded" + RESET)
 
-    if inputs["masks"]["manipulation"] == True: # select and apply mask manipulation scheme
+    if "manipulation" in inputs["masks"]: # select and apply mask manipulation scheme
         maskA, maskB = set_masks(brain_mask, face_mask, gap) # apply additional masking scheme
         niftify(maskA, abs(a11), abs(a22), abs(a33), f'segmentations/output_mask_{dataID}/brain2.nii.gz')
         niftify(maskB, abs(a11), abs(a22), abs(a33), f'segmentations/output_mask_{dataID}/face2.nii.gz')
@@ -294,8 +297,13 @@ def run_raw_deface(config='config.json'):
 
     print(GREEN + "Masks have been prepared" + RESET)
 
-    nc = data.shape[-1] # get total number of original coils
-    brain_covar, face_covar = make_A_B(og_image, nc, maskA, maskB) # create covariance matrices
+    nc = ref_data.shape[-1] if "reference_data" in inputs else data.shape[-1] # get total number of original coils
+
+    if "reference_data" in inputs:
+        brain_covar, face_covar = make_A_B(ref_image, nc, maskA, maskB) # create covariance matrices with reference data
+    else:
+        brain_covar, face_covar = make_A_B(og_image, nc, maskA, maskB) # create covariance matrices with input data
+
     print(GREEN + "Brain and face covariance matrices have been computed" + RESET)
 
     eigenvec = rovir(nc, brain_covar, face_covar) # finding the eigenvectors for (brain_covar)v = λ(face_covar)v
