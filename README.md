@@ -61,12 +61,9 @@ If the config file is not specified by the user, the pipeline will use the defau
 
 The image shape and affine matrix of the user's dataset must be specified in the config.json file for the program to handle the orientation correctly. 
 
-The format of the k-space data is expected to have the shape (x, y, z, channel), where the x-axis corresponds to sagittal slices, y-axis corresponds to coronal slices, and z-axis corresponds to axial slices. 
-
-In addition, the voxel spacings are expected to be positive (e.g., +1mm). Here is how the expected orientation looks displayed using Matplotlib (i.e. displaying a slice image[x_slice, :, :]):
-![expected orientation](assets/input_orientation.png)
-
-Rather than manually achieving the expected orientation, you can specify in the config.json file what your current image shape and voxel spacings are, and the program will handle it. The default shape is (x, y, z, channel) and the default voxel spacings are +1mm.
+The format of the k-space data will be manipulated to have the shape (x, y, z, channel), where the x-axis corresponds to sagittal slices, y-axis corresponds to coronal slices, and z-axis corresponds to axial slices. In addition, the voxel spacings will be manipulated to agree with all positive voxel spacings (e.g., +1mm). 
+<!-- Here is how the expected orientation looks displayed using Matplotlib (i.e. displaying a slice image[x_slice, :, :]): -->
+<!-- ![expected orientation](assets/input_orientation.png) -->
 
 ### Input Parameters
 
@@ -103,6 +100,44 @@ If `top_coils` is not specified, then the selected `threshold_method` and the co
                     "a11": 1, 
                     "a22": 1,
                     "a33": -1},
+```
+An example of a config.json file with the proper structure and all parameters specified looks like this:
+```
+{
+    "input_data": {"data_path": "input/test03.npy",
+                    "data_id": "03x",
+                    "x_y_z_channel": [0, 1, 2, 3],
+                    "a11": 1, 
+                    "a22": 1,
+                    "a33": -1},
+    
+    "reference_data": {"data_path": "input/example.npy",
+                    "data_id": "reference",
+                    "x_y_z_channel": [0, 1, 2, 3],
+                    "a11": 1, 
+                    "a22": 1,
+                    "a33": -1},
+
+    "visualization": {"x_slice": 80,
+                    "y_slice": 80,
+                    "z_slice": 120,
+                    "plt_on": true,
+                    "compare_retention": true,
+                    "show_virtual_coils":true},
+
+    "coil_selection": {"threshold_method": "face_retained",
+                        "threshold_value": 10,
+                        "top_coils": 10},
+
+    "masks": {"face_mask":"segmentations/output_mask_03x/face.nii.gz",
+                "brain_mask":"segmentations/output_mask_03x/brain.nii.gz",
+                "manipulation": "A",
+                "gap": 10},
+
+    "output":{"save_defaced_kspace": true,
+            "save_defaced_image": true}
+}
+
 ```
 
 ### Further Explanation of Select Input Parameters *
