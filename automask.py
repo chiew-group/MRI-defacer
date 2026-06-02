@@ -23,7 +23,7 @@ def gen_mask(input_fp, output_fp, saveID):
                         input = input_fp, 
                         output = output_fp,
                         task = "face_mr",
-                        device = "cpu"
+                        device = "gpu"
         )
         # calling TotalSegmentator API for brain task
         totalsegmentator(
@@ -32,7 +32,7 @@ def gen_mask(input_fp, output_fp, saveID):
                         task = "total_mr", 
                         roi_subset = ["brain"],
                         fast = True,
-                        device = "cpu"
+                        device = "gpu"
         )
 
         #face_mask = nib.load(os.path.join(output_fp, "face.nii.gz"))
