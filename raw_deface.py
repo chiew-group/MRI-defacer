@@ -98,31 +98,32 @@ def set_masks(ROI, interference, option, gap=10):
             maskA = binary_erosion(maskA).astype(int)
             maskB = binary_erosion(maskB).astype(int)
 
+    if option == "C":
     # ##### OPTION C
-    # x_roi, y_roi, z_roi = np.where(ROI)
-    
-    # # get min and max brain index for each direction
-    # xmin, xmax = np.min(x_roi), np.max(x_roi)
-    # ymin, ymax = np.min(y_roi), np.max(y_roi)
-    # zmin, zmax = np.min(z_roi), np.max(z_roi)
-    
-    # # create box mask for brain
-    # maskA = np.zeros_like(ROI)
-    # maskA[xmin:xmax+1, ymin:ymax+1, zmin:zmax+1] = 1
+        x_roi, y_roi, z_roi = np.where(ROI)
+        
+        # get min and max brain index for each direction
+        xmin, xmax = np.min(x_roi), np.max(x_roi)
+        ymin, ymax = np.min(y_roi), np.max(y_roi)
+        zmin, zmax = np.min(z_roi), np.max(z_roi)
+        
+        # create box mask for brain
+        maskA = np.zeros_like(ROI)
+        maskA[xmin:xmax+1, ymin:ymax+1, zmin:zmax+1] = 1
 
-    # x_face, y_face, z_face = np.where(interference)
-    
-    # # get min and max face index for each direction
-    # xmin, xmax = np.min(x_face), np.max(x_face)
-    # ymin, ymax = np.min(y_face), np.max(y_face)
-    # zmin, zmax = np.min(z_face), np.max(z_face)
-    
-    # # create box mask for face
-    # maskB = np.zeros_like(ROI)
-    # maskB[xmin:xmax+1, ymin:ymax+1, zmin:zmax+1] = 1
+        x_face, y_face, z_face = np.where(interference)
+        
+        # get min and max face index for each direction
+        xmin, xmax = np.min(x_face), np.max(x_face)
+        ymin, ymax = np.min(y_face), np.max(y_face)
+        zmin, zmax = np.min(z_face), np.max(z_face)
+        
+        # create box mask for face
+        maskB = np.zeros_like(ROI)
+        maskB[xmin:xmax+1, ymin:ymax+1, zmin:zmax+1] = 1
 
-    # overlap = maskA & maskB
-    # maskB = (maskB & ~overlap).astype(int)
+        overlap = maskA & maskB
+        maskB = (maskB & ~overlap).astype(int)
     
     return maskA, maskB
 
@@ -287,7 +288,7 @@ def run_raw_deface(config='config.json'):
     print(GREEN + "Mask has been successfully loaded" + RESET)
 
     if "manipulation" in inputs["masks"]: # select and apply mask manipulation scheme
-        maskA, maskB = set_masks(brain_mask, face_mask, gap) # apply additional masking scheme
+        maskA, maskB = set_masks(brain_mask, face_mask, inputs["masks"]["manipulation"], gap) # apply additional masking scheme
         niftify(maskA, abs(a11), abs(a22), abs(a33), f'segmentations/output_mask_{dataID}/brain2.nii.gz')
         niftify(maskB, abs(a11), abs(a22), abs(a33), f'segmentations/output_mask_{dataID}/face2.nii.gz')
 
@@ -310,10 +311,11 @@ def run_raw_deface(config='config.json'):
     np.save(f'results/xfm_{dataID}.npy', eigenvec)
     print(GREEN + "Eigenvectors computed" + RESET)
     
-    if inputs["visualization"]["compare_retention"] == True:
-        compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice) # visualize comparison between different # of coils retained
-    if inputs["visualization"]["show_virtual_coils"] == True:
-        show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual coils
+    if inputs["visualization"]["plt_on"] == True:
+        if inputs["visualization"]["compare_retention"] == True:
+            compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice) # visualize comparison between different # of coils retained
+        if inputs["visualization"]["show_virtual_coils"] == True:
+            show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual coils
 
     method = inputs["coil_selection"]["threshold_method"] # load method/metric for selecting top coils
     threshold = inputs["coil_selection"]["threshold_value"] # load limit/requirement for selecting top coils
