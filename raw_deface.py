@@ -21,6 +21,7 @@ from visualization import show_virtual_coils
 from to_nifti import niftify
 from automask import gen_mask
 
+import time
 
 RED = '\033[91m'
 GREEN = '\033[92m'
@@ -202,7 +203,7 @@ def run_raw_deface(config='config.json'):
     data = np.moveaxis(data, [0, 1, 2, 3], sorted_ind) 
 
     # defining image slices to visualize  
-    if "x_slice" in inputs["input_data"]:
+    if "x_slice" in inputs["visualization"]:
         try:
             x_slice = int(inputs["visualization"]["x_slice"])
         except ValueError:
@@ -214,7 +215,7 @@ def run_raw_deface(config='config.json'):
     else:
         x_slice = data.shape[0]//2
     
-    if "y_slice" in inputs["input_data"]:
+    if "y_slice" in inputs["visualization"]:
         try:
             y_slice = int(inputs["visualization"]["y_slice"])
         except ValueError:
@@ -226,7 +227,7 @@ def run_raw_deface(config='config.json'):
     else:
         y_slice = data.shape[1]//2
 
-    if "z_slice" in inputs["input_data"]:
+    if "z_slice" in inputs["visualization"]:
         try:
             z_slice = int(inputs["visualization"]["z_slice"])
         except ValueError:
