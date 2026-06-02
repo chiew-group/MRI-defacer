@@ -202,26 +202,42 @@ def run_raw_deface(config='config.json'):
     data = np.moveaxis(data, [0, 1, 2, 3], sorted_ind) 
 
     # defining image slices to visualize  
-    try:
-        x_slice = int(inputs["visualization"]["x_slice"])
-        y_slice = int(inputs["visualization"]["y_slice"])
-        z_slice = int(inputs["visualization"]["z_slice"])
-    except ValueError:
-        print(RED + "One of your slices is not a valid integer. Change in config.json." + RESET)
-        exit()
-
-    if x_slice >= data.shape[0] or x_slice < -data.shape[0]:
-        print(RED + f"Your x slice is out of bounds for image shape: {data.shape}"  + RESET )
-        exit()
-
-    if y_slice >= data.shape[1] or y_slice < -data.shape[1]:
-        print(RED + f"Your y slice is out of bounds for image shape: {data.shape}"  + RESET)
-        exit()
-
-    if z_slice >= data.shape[2] or z_slice < -data.shape[2]:
-        print(RED + f"Your z slice is out of bounds for image shape: {data.shape}"  + RESET)
-        exit()
+    if "x_slice" in inputs["input_data"]:
+        try:
+            x_slice = int(inputs["visualization"]["x_slice"])
+        except ValueError:
+            print(RED + "Your x slice is not a valid integer. Change in config.json." + RESET)
+            exit() 
+        if x_slice >= data.shape[0] or x_slice < -data.shape[0]:
+            print(RED + f"Your x slice is out of bounds for image shape: {data.shape}"  + RESET )
+            exit()
+    else:
+        x_slice = data.shape[0]//2
     
+    if "y_slice" in inputs["input_data"]:
+        try:
+            y_slice = int(inputs["visualization"]["y_slice"])
+        except ValueError:
+            print(RED + "Your y slice is not a valid integer. Change in config.json." + RESET)
+            exit() 
+        if y_slice >= data.shape[1] or y_slice < -data.shape[1]:
+            print(RED + f"Your y slice is out of bounds for image shape: {data.shape}"  + RESET )
+            exit()   
+    else:
+        y_slice = data.shape[1]//2
+
+    if "z_slice" in inputs["input_data"]:
+        try:
+            z_slice = int(inputs["visualization"]["z_slice"])
+        except ValueError:
+            print(RED + "Your z slice is not a valid integer. Change in config.json." + RESET)
+            exit() 
+        if z_slice >= data.shape[2] or z_slice < -data.shape[2]:
+            print(RED + f"Your z slice is out of bounds for image shape: {data.shape}"  + RESET )
+            exit()  
+    else:
+        z_slice = data.shape[2]//2
+
     # fourier transform and shift data 
     og_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
     og_image_rsos = rsos(og_image) # calculate rsos of image
