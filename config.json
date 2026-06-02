@@ -5,20 +5,20 @@
                     "a11": 1, 
                     "a22": 1,
                     "a33": -1},
-
+    
     "visualization": {"x_slice": 80,
                     "y_slice": 80,
                     "z_slice": 120,
-                    "plt_on": false},
+                    "plt_on": false,
+                    "compare_retention": false,
+                    "show_virtual_coils": false},
 
     "coil_selection": {"threshold_method": "face_retained",
-            "threshold_value": 10},
+                        "threshold_value": 10},
 
-    "masks": {"face_mask": "segmentations/output_mask_03/face.nii.gz",
-            "brain_mask": "segmentations/output_mask_03/brain.nii.gz",
-            "gap": 10},
+    "masks": {"manipulation": "A",
+                "gap": 10},
 
     "output":{"save_defaced_kspace": true,
             "save_defaced_image": true}
-
 }
