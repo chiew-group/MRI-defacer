@@ -1,5 +1,6 @@
 import numpy as np 
 import nibabel as nib 
+import torch
 from totalsegmentator.python_api import totalsegmentator 
 import os
 # from scipy.ndimage import zoom
@@ -18,12 +19,14 @@ def gen_mask(input_fp, output_fp, saveID):
         saveID -> str: ID to save numpy masks 
         '''
 
+        device = "gpu" if torch.cuda.is_available() else "cpu"
+
         # calling TotalSegmentator API for face_mr task
         totalsegmentator(
                         input = input_fp, 
                         output = output_fp,
                         task = "face_mr",
-                        device = "gpu"
+                        device = device
         )
         # calling TotalSegmentator API for brain task
         totalsegmentator(
@@ -32,7 +35,7 @@ def gen_mask(input_fp, output_fp, saveID):
                         task = "total_mr", 
                         roi_subset = ["brain"],
                         fast = True,
-                        device = "gpu"
+                        device = device
         )
 
         #face_mask = nib.load(os.path.join(output_fp, "face.nii.gz"))
