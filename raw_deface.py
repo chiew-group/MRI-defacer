@@ -4,6 +4,7 @@ import os
 import nibabel as nib
 
 import numpy as np 
+import scipy as sp
 from scipy.linalg import orth
 from scipy.linalg import norm
 
@@ -21,13 +22,22 @@ from visualization import show_virtual_coils
 from to_nifti import niftify
 from automask import gen_mask
 
-import time
+
+import matplotlib
+
 
 RED = '\033[91m'
 GREEN = '\033[92m'
 RESET = '\033[0m'
 
-import matplotlib
+import torch
+
+if(torch.cuda.is_available()):
+    print("GPU mode")
+    gpu_mode = True
+else:
+    print("CPU mode")
+    gpu_mode = False
 
 def rsos(image):
     '''
@@ -123,8 +133,8 @@ def set_masks(ROI, interference, option, gap=10):
         maskB = np.zeros_like(ROI)
         maskB[xmin:xmax+1, ymin:ymax+1, zmin:zmax+1] = 1
 
-        overlap = maskA & maskB
-        maskB = (maskB & ~overlap).astype(int)
+        overlap = maskA.astype(bool) & maskB.astype(bool)
+        maskB = (maskB.astype(bool) & ~overlap).astype(int)
     
     return maskA, maskB
 
@@ -168,7 +178,7 @@ def make_A_B(image, nc, maskA, maskB):
     return (A, B)
 
 def run_raw_deface(config='config.json'):
-    matplotlib.use('Qt5Agg')
+    # matplotlib.use('Qt5Agg')
     os.makedirs('input', exist_ok = True)
     os.makedirs('segmentations', exist_ok = True)
     os.makedirs('results', exist_ok = True)
@@ -240,9 +250,11 @@ def run_raw_deface(config='config.json'):
         z_slice = data.shape[2]//2
 
     # fourier transform and shift data 
-    og_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
+    if gpu_mode:
+        og_image = torch.fft.fftshift(torch.fft.ifftn(torch.fft.fftshift(data, dim = (0, 1, 2)), dim=(0, 1, 2)), dim = (0, 1, 2))    
+    else: # use scipy with overwriting 
+        og_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(data, axes = (0, 1, 2)), axes=(0, 1, 2), overwrite_x=True), axes = (0, 1, 2))
     og_image_rsos = rsos(og_image) # calculate rsos of image
-
 
 ###
     if "reference_data" in inputs: 
@@ -268,11 +280,15 @@ def run_raw_deface(config='config.json'):
         # moving data axes to (x, y, z, ch) shape
         x_y_z_ch_ref = inputs["reference_data"]["x_y_z_channel"]
         sorted_ind_ref = np.argsort(x_y_z_ch_ref)
-        ref_data = np.moveaxis(data, [0, 1, 2, 3], sorted_ind_ref) 
+        ref_data = np.moveaxis(ref_data, [0, 1, 2, 3], sorted_ind_ref) 
         
         # fourier transform and shift data 
-        ref_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(ref_data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
+        if gpu_mode:
+            ref_image = torch.fft.fftshift(torch.fft.ifftn(torch.fft.fftshift(ref_data, dim = (0, 1, 2)), dim=(0, 1, 2)), dim = (0, 1, 2))
+        else:
+            ref_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(ref_data, axes = (0, 1, 2)), axes=(0, 1, 2), overwrite_x=True), axes = (0, 1, 2))
         ref_image_rsos = rsos(ref_image) # calculate rsos of image
+
 ###
 
     try:
@@ -388,3 +404,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_raw_deface(args.config)
+
