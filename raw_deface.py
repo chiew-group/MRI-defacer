@@ -32,13 +32,6 @@ RESET = '\033[0m'
 
 import torch
 
-if(torch.cuda.is_available()):
-    print("GPU mode")
-    gpu_mode = True
-else:
-    print("CPU mode")
-    gpu_mode = False
-
 def rsos(image):
     '''
     Computes the root sum of squares of the image across the channel dimension.
@@ -249,11 +242,8 @@ def run_raw_deface(config='config.json'):
     else:
         z_slice = data.shape[2]//2
 
-    # fourier transform and shift data 
-    if gpu_mode:
-        og_image = torch.fft.fftshift(torch.fft.ifftn(torch.fft.fftshift(data, dim = (0, 1, 2)), dim=(0, 1, 2)), dim = (0, 1, 2))    
-    else: # use scipy with overwriting 
-        og_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(data, axes = (0, 1, 2)), axes=(0, 1, 2), overwrite_x=True), axes = (0, 1, 2))
+    # fourier transform and shift data, use scipy with overwriting 
+    og_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(data, axes = (0, 1, 2)), axes=(0, 1, 2), overwrite_x=True), axes = (0, 1, 2))
     og_image_rsos = rsos(og_image) # calculate rsos of image
 
 ###
@@ -283,10 +273,7 @@ def run_raw_deface(config='config.json'):
         ref_data = np.moveaxis(ref_data, [0, 1, 2, 3], sorted_ind_ref) 
         
         # fourier transform and shift data 
-        if gpu_mode:
-            ref_image = torch.fft.fftshift(torch.fft.ifftn(torch.fft.fftshift(ref_data, dim = (0, 1, 2)), dim=(0, 1, 2)), dim = (0, 1, 2))
-        else:
-            ref_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(ref_data, axes = (0, 1, 2)), axes=(0, 1, 2), overwrite_x=True), axes = (0, 1, 2))
+        ref_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(ref_data, axes = (0, 1, 2)), axes=(0, 1, 2), overwrite_x=True), axes = (0, 1, 2))
         ref_image_rsos = rsos(ref_image) # calculate rsos of image
 
 ###
