@@ -91,19 +91,7 @@ def set_masks(ROI, interference, option, gap=10):
             maskB[:, :, zmax_face] = 0
 
     if option == "B":
-    ##### OPTION B
-        
-        # simplify shape using convex hull
-        maskA = convex_hull_image(ROI).astype(int)
-        maskB = convex_hull_image(interference).astype(int)
-        # perform binary erosion until overlap is gone
-        overlap = maskA.astype(bool) & maskB.astype(bool) 
-        while np.count_nonzero(overlap) != 0:
-            maskA = binary_erosion(maskA).astype(int)
-            maskB = binary_erosion(maskB).astype(int)
-
-    if option == "C":
-    # ##### OPTION C
+    # ##### OPTION B
         x_roi, y_roi, z_roi = np.where(ROI)
         
         # get min and max brain index for each direction
