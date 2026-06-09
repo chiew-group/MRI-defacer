@@ -1,5 +1,5 @@
+import os
 import matplotlib
-matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 import numpy as np 
 
@@ -8,6 +8,13 @@ from scipy.linalg import norm
 
 from ROVir import form_virtual_coil_data
 
+from IPython import get_ipython
+
+if 'ipykernel' in str(get_ipython()):
+        matplotlib.use('module://matplotlib_inline.backend_inline')
+
+else:
+    matplotlib.use('Qt5Agg')         
 
 def display_defaced(og_image_rsos, defaced_image_rsos, x_slice, y_slice, z_slice, 
             maskA, maskB, brain_retain, face_retain):
@@ -105,6 +112,9 @@ def compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice):
         nc -> int: the number of original coils 
         x_slice -> int: the slice number for the sagittal view desired for visualization 
     '''
+
+    (nrow, ncol) = closest_factors(nc)
+
     # display rsos image for retaining 1, 2, 3, ..., nc virtual coils 
     for i in range(1, nc+1):
         eigenvec_retain = orth(eigenvec[:, :i]) # retain i eigenvectors
@@ -119,7 +129,8 @@ def compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice):
         brain_retain = (norm((orth_proj @ brain_covar @ orth_proj), ord = 'fro') / norm (brain_covar, ord = 'fro'))*100
         face_retain = (norm((orth_proj @ face_covar @ orth_proj), ord = 'fro') / norm (face_covar, ord = 'fro'))*100
 
-        plt.subplot(3,4,i)
+        
+        plt.subplot(nrow,ncol,i)
         plt.axis('off')
         plt.text(image_rsos[x_slice, :, :].shape[0]//2, 5, f'Brain: {round(brain_retain, 2)}% \n Face: {round(face_retain, 2)}%', color="white", fontsize=8, ha='center', va='top')
         plt.text(image_rsos[x_slice, :, :].shape[0]-5, image_rsos[x_slice, :, :].shape[1], f'{i}', color="white", fontsize=15, ha='right', va='bottom')
