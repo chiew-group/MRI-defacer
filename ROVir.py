@@ -2,8 +2,18 @@ import numpy as np
 from scipy.linalg import orth
 from scipy.linalg import eigh
 from scipy.linalg import norm
+import matplotlib
 import matplotlib.pyplot as plt
 import kneed
+
+from IPython import get_ipython
+
+if 'ipykernel' in str(get_ipython()):
+        matplotlib.use('module://matplotlib_inline.backend_inline')
+
+else:
+    matplotlib.use('Qt5Agg')         
+
 
 RED = '\033[91m'
 RESET = '\033[0m'
@@ -137,6 +147,8 @@ def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, plt_on=Fals
 
     if plt_on:
 
+        plt.figure(figsize=(16, 10), dpi=120)
+
         # visualize metrics as scatterplots
         plt.subplot(2,2,1)
         plt.scatter(xaxis, sirs, c = "blue")
@@ -144,6 +156,7 @@ def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, plt_on=Fals
         plt.title("SIR of Each Virtual Coil")
         plt.xlabel("jth Coil")
         plt.legend()
+        plt.autoscale(enable=True, axis='both', tight=True)
 
         plt.subplot(2,2,2)
         plt.scatter(xaxis, brain_signal, c = "green")
@@ -151,6 +164,7 @@ def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, plt_on=Fals
         plt.title("Signal Energy of Each Virtual Coil")
         plt.xlabel("jth Coil")
         plt.legend()
+        plt.autoscale(enable=True, axis='both', tight=True)
 
         plt.subplot(2,2,3)
         plt.scatter(xaxis, face_signal, c = "red")
@@ -158,14 +172,18 @@ def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, plt_on=Fals
         plt.title("Interference Energy of Each Virtual Coil")
         plt.xlabel("jth Coil")
         plt.legend()
+        plt.autoscale(enable=True, axis='both', tight=True)
         
         plt.subplot(2,2,4)
         plt.scatter(np.arange(1, nc+1), np.array(brain_retain), label = "Brain Retained", c= "green")
         plt.scatter(np.arange(1, nc+1), np.array(face_retain), label = "Face Retained", c= "red")
         plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
-        plt.ylabel("Percentage Retained (%)"); plt.xlabel("Total Channels Retained (N)")
+        plt.ylabel("Percentage Retained (%)")
+        plt.xlabel("Total Channels Retained (N)")
         plt.legend()
         plt.title("Brain/Face Signal Retention vs Virtual Coils Retained")
+        plt.autoscale(enable=True, axis='both', tight=True)
+        plt.tight_layout(pad=3)
         plt.show()
 
     return coil + 1 # plus 1 because slicing is not inclusive, i.e if eigenvec[:,:coil], coil is not included
