@@ -161,6 +161,16 @@ def make_A_B(image, nc, maskA, maskB):
 
     return (A, B)
 
+def by_channel_fft(data): 
+    # fft by channels and compute 3d image right away, 
+    # getting rid of channel dimension right away
+    rsos_image = np.zeros(data.shape[:3])
+    for ch in range(data.shape[3]):
+        ch_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(data[:, :, :, ch], axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
+        rsos_image += np.abs(ch_image)**2
+    rsos_image = np.sqrt(rsos_image)
+    return rsos_image
+
 def run_raw_deface(config='config.json'):
     matplotlib.use('Qt5Agg')
     os.makedirs('input', exist_ok = True)
