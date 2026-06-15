@@ -65,7 +65,7 @@ def set_masks(ROI, interference, option, gap=10):
         maskB -> np.ndarray: a 3D array of the face region simplified 
 
     '''
-
+    
     if option == "A":
         ##### OPTION A
         # simplify shape using convex hull
@@ -153,6 +153,7 @@ def make_A_B(image, nc, maskA, maskB):
         maskA_slice = maskA[:, :, z_slice]
         maskB_slice = maskB[:, :, z_slice]
 
+        print(maskA_slice.shape)
         maskedA_slice = cur_slice * maskA_slice[:, :, None]
         maskedB_slice = cur_slice * maskB_slice[:, :, None]
 
@@ -295,7 +296,7 @@ def run_raw_deface(config='config.json'):
         else:
             niftify(og_image_rsos, abs(a11), abs(a22), abs(a33), f'input/input_image_{dataID}') # save nifti of image
             gen_mask(f'input/input_image_{dataID}.nii.gz', f'segmentations/output_mask_{dataID}', dataID) # send nifti image for segmentation
-
+        
         #face_mask = np.load(f'segmentations/face_mask_{dataID}.npy') # load face mask
         #brain_mask = np.load(f'segmentations/brain_mask_{dataID}.npy') # load brain mask
         face_mask = nib.load(os.path.join(f'segmentations/output_mask_{dataID}', "face.nii.gz")).get_fdata()
