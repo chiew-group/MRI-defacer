@@ -19,7 +19,7 @@ def niftify(image, a11, a22, a33, save_path):
 
     '''
     
-    # set intensity range to 0-255
+    # normalize intensity range to 0-255
     image = (image - image.min()) / (image.max() - image.min()) * 255
 
     # converting numpy data to nifti file 
@@ -30,7 +30,7 @@ def niftify(image, a11, a22, a33, save_path):
                     
     ]) 
     nifti_img = nib.Nifti1Image(image.astype(np.uint8), affine)
-    print(nifti_img.affine)
+    # print(nifti_img.affine)
 
     # saving the nifti file 
     fp = f'{save_path}.nii.gz'
