@@ -1,15 +1,14 @@
+# importing libraries
 import json
 import os
-
 import nibabel as nib
-
 import numpy as np 
 import scipy as sp
 from scipy.linalg import orth
 from scipy.linalg import norm
-
 from skimage.morphology import convex_hull_image 
 from skimage.morphology import binary_erosion 
+import matplotlib
 
 from ROVir import rovir
 from ROVir import top_nv
@@ -20,17 +19,13 @@ from visualization import compare_retention
 from visualization import show_virtual_coils
 
 from to_nifti import niftify
+
 from automask import gen_mask
 
-
-import matplotlib
-
-
+# colours for print statements
 RED = '\033[91m'
 GREEN = '\033[92m'
 RESET = '\033[0m'
-
-import torch
 
 def rsos(image):
     '''
@@ -65,9 +60,9 @@ def set_masks(ROI, interference, option, gap=10):
         maskB -> np.ndarray: a 3D array of the face region simplified 
 
     '''
-    
+    # ============================== OPTION A ==============================
     if option == "A":
-        ##### OPTION A
+        
         # simplify shape using convex hull
         maskA = convex_hull_image(ROI).astype(int)
         maskB = convex_hull_image(interference).astype(int)
@@ -90,8 +85,8 @@ def set_masks(ROI, interference, option, gap=10):
             maskB[:, ymin_face, :] = 0
             maskB[:, :, zmax_face] = 0
 
+    # ============================== OPTION B ==============================
     if option == "B":
-    # ##### OPTION B
         x_roi, y_roi, z_roi = np.where(ROI)
         
         # get min and max brain index for each direction
@@ -121,7 +116,6 @@ def set_masks(ROI, interference, option, gap=10):
 
 def make_A_B(image, nc, maskA, maskB):
     '''
-
     To compute the covariance matrices A and B that correspond to the brain and face regions, respectively.
 
     Parameters
@@ -137,26 +131,19 @@ def make_A_B(image, nc, maskA, maskB):
         B -> np.ndarray: the 2D covariance matrix corresponding to the face, shape (nc, nc)
 
     '''
-    # to ensure 3D masks now has same dimensions as 4D image data
-    # maskA = np.expand_dims(maskA, axis = 3) 
-    # maskB = np.expand_dims(maskB, axis = 3)
 
-    # applying masks to image data by entry-wise multiplication
-    # maskedA = image*maskA 
-    # maskedB = image*maskB 
+    A = np.zeros((nc, nc), dtype=np.complex64) # array to store A covariance matrix
+    B = np.zeros((nc, nc), dtype=np.complex64) # array to store B covariance matrix
 
-    A = np.zeros((nc, nc), dtype=np.complex64)
-    B = np.zeros((nc, nc), dtype=np.complex64)
+    for z_slice in range(image.shape[2]): # calculate covariance matrices slice by slice
+        cur_slice = image[:, :, z_slice, :] # get current z slice
+        maskA_slice = maskA[:, :, z_slice] # get current maskA (brain) for z slice
+        maskB_slice = maskB[:, :, z_slice] # get current maskB (face) for z slice
 
-    for z_slice in range(image.shape[2]):
-        cur_slice = image[:, :, z_slice, :]
-        maskA_slice = maskA[:, :, z_slice]
-        maskB_slice = maskB[:, :, z_slice]
+        maskedA_slice = cur_slice * maskA_slice[:, :, None] # apply brain mask to z slice of image  
+        maskedB_slice = cur_slice * maskB_slice[:, :, None] # apply face mask to z slice of image
 
-        print(maskA_slice.shape)
-        maskedA_slice = cur_slice * maskA_slice[:, :, None]
-        maskedB_slice = cur_slice * maskB_slice[:, :, None]
-
+        
         A += np.tensordot(np.conj(maskedA_slice), maskedA_slice, axes=([0,1],[0,1]))
         B += np.tensordot(np.conj(maskedB_slice), maskedB_slice, axes=([0,1],[0,1]))
 
