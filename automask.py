@@ -1,8 +1,5 @@
 import numpy as np
-import nibabel as nib
 import os
-import subprocess
-import shutil
 import ants
 import antspynet
 
