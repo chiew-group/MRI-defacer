@@ -6,3 +6,4 @@ scipy==1.15.3
 scikit-image==0.25.2
 PyQt5==5.15.11
 antspyx
+antspynet
