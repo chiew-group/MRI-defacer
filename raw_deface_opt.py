@@ -8,7 +8,10 @@ from scipy.linalg import orth
 from scipy.linalg import norm
 from skimage.morphology import convex_hull_image 
 from skimage.morphology import binary_erosion 
+from skimage.metrics import structural_similarity as ssim
+from skimage.metrics import mean_squared_error
 import matplotlib
+import pandas as pd
 
 from ROVir import rovir
 from ROVir import top_nv
@@ -132,8 +135,8 @@ def make_A_B(image, nc, maskA, maskB):
 
     '''
 
-    A = np.zeros((nc, nc), dtype=np.complex64) # array to store A covariance matrix
-    B = np.zeros((nc, nc), dtype=np.complex64) # array to store B covariance matrix
+    A = np.zeros((nc, nc), dtype=np.complex128) # array to store A covariance matrix
+    B = np.zeros((nc, nc), dtype=np.complex128) # array to store B covariance matrix
 
     for z_slice in range(image.shape[2]): # calculate covariance matrices slice by slice
         cur_slice = image[:, :, z_slice, :] # get current z slice
@@ -143,7 +146,7 @@ def make_A_B(image, nc, maskA, maskB):
         maskedA_slice = cur_slice * maskA_slice[:, :, None] # apply brain mask to z slice of image  
         maskedB_slice = cur_slice * maskB_slice[:, :, None] # apply face mask to z slice of image
 
-        
+        # dot product over x and y axes, then sum over z axis to find covariance
         A += np.tensordot(np.conj(maskedA_slice), maskedA_slice, axes=([0,1],[0,1]))
         B += np.tensordot(np.conj(maskedB_slice), maskedB_slice, axes=([0,1],[0,1]))
 
@@ -159,8 +162,14 @@ def by_channel_fft(data):
     rsos_image = np.sqrt(rsos_image)
     return rsos_image
 
+
+
+
 def run_raw_deface(config='config.json'):
+
     matplotlib.use('Qt5Agg')
+
+    # create required folders if not already existing
     os.makedirs('input', exist_ok = True)
     os.makedirs('segmentations', exist_ok = True)
     os.makedirs('results', exist_ok = True)
@@ -358,6 +367,7 @@ def run_raw_deface(config='config.json'):
     if inputs["output"]["save_defaced_kspace"] == True:
         np.save(f'results/defaced_{dataID}.npy', virtual_coil_data)
 
+        
     ####################################################################
     # FOLLOWING CODE IS FOR VISUALIZATION OF FINAL RESULT
 
@@ -372,6 +382,27 @@ def run_raw_deface(config='config.json'):
     if inputs["output"]["save_defaced_image"] == True:
         niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'results/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain}_face={face_retain}')
 
+    quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, maskB, og_image_rsos, defaced_image)
+
+def quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, maskB, og_image_rsos, defaced_image):
+    
+    total_voxels = og_image_rsos.shape[0] * og_image_rsos.shape[1] * og_image_rsos.shape[2]
+    brain_voxels = 100* np.sum(maskA) / total_voxels # compute brain voxels detected as a percentage of whole
+    face_voxels = 100* np.sum(maskB) / total_voxels # compute face voxels detected as a percentage of whole
+    
+    # appened information to a text file to log output metrics
+    new_log = pd.DataFrame({
+    'Data ID': [dataID],
+    'Virtual Coils Retained (#)': [top_eigenvec],
+    'Brain Volume Detected (%)': [brain_voxels],
+    'Face Volume Detected (%)': [face_voxels],
+    'Brain Signal Retained (%)': [brain_retain],
+    'Face Signal Retained (%)': [face_retain],
+    })
+    
+    new_log.to_csv('output_log.txt', mode='a', header= not os.path.exists('output_log.txt'), sep='\t')
+
+
 if __name__ == "__main__": 
     import argparse
 
@@ -381,4 +412,4 @@ if __name__ == "__main__":
 
     run_raw_deface(args.config)
 
-
+    
