@@ -185,6 +185,8 @@ show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual c
 5. The NIfTI version of your input may not have been generated well. You can check the input after coverting into a NIfTI image, which can be found in a folder named **input** using 3DSlicer. Note in [to_nifti.py](to_nifti.py), the image intensity is max-min normalized to 0-255. 
 6. Ensure that you have obtained and activated a license for the face_mr task from TotalSegmentator. Otherwise, the TotalSegmentator call will fail. 
 
+A text file named `output_log` will be generated, containing information and metrics on the defacing quality for each input. The brain voxels detected by the segmentation tool before and after are used as a proxy for comparing brain volume before and after defacing. This metric also warns user of whether a bad segmentation occurred based on expected brain volumes, causing a potentially poor defacing result. 
+
 ## Citations 
 #### [1] Kim D, Cauley SF, Nayak KS, Leahy RM, Haldar JP. Region- optimized virtual (ROVir) coils: Localization and/or suppression of spatial regions using sensor- domain beamforming. Magn Reson Med. 2021;86:197–212. https://doi.org/10.1002/mrm.28706 
 
