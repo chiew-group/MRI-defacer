@@ -8,8 +8,6 @@ from scipy.linalg import orth
 from scipy.linalg import norm
 from skimage.morphology import convex_hull_image 
 from skimage.morphology import binary_erosion 
-from skimage.metrics import structural_similarity as ssim
-from skimage.metrics import mean_squared_error
 import matplotlib
 import pandas as pd
 
@@ -114,7 +112,32 @@ def set_masks(ROI, interference, option, gap=10):
 
         overlap = maskA.astype(bool) & maskB.astype(bool)
         maskB = (maskB.astype(bool) & ~overlap).astype(int)
-    
+
+    # ============================== OPTION C ==============================
+    # find lowest and most anterior points of brain, draw a tangent 
+    if option == "C":
+        maskA = ROI
+        x_brain, y_brain, z_brain = np.where(ROI) # get brain voxel positions along each axes
+        zmin = np.min(z_brain) # get the most inferior brain voxel position
+        ymax = np.min(y_brain) # get the most anterior brain voxel position 
+
+        m = ymax
+        # define a tangent going through the two points, fill everything below it 
+        np.linspace
+
+        # fill all x slices with
+
+    # ============================== OPTION D ==============================
+    # L-shaped face mask 
+    if option == "D":
+        maskA = ROI
+        zmin = np.min(z_brain) # get the most inferior brain voxel position
+        ymax = np.min(y_brain) # get the most anterior brain voxel position 
+
+        maskB = np.zeros_like(ROI)
+
+    # ============================== OPTION E ==============================
+
     return maskA, maskB
 
 def make_A_B(image, nc, maskA, maskB):
@@ -380,28 +403,40 @@ def run_raw_deface(config='config.json'):
     
     # save nifti of results for visualization in 3DSlicer
     if inputs["output"]["save_defaced_image"] == True:
-        niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'results/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain}_face={face_retain}')
+        niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'results/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain:.2}_face={face_retain:.2}')
 
-    quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, maskB, og_image_rsos, defaced_image)
+    mask_scheme = inputs["masks"]["manipulation"] if "manipulation" in inputs["masks"] else None
+    quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, mask_scheme, method, threshold)
 
-def quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, maskB, og_image_rsos, defaced_image):
+def quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, mask_scheme, method, threshold):
     
-    total_voxels = og_image_rsos.shape[0] * og_image_rsos.shape[1] * og_image_rsos.shape[2]
-    brain_voxels = 100* np.sum(maskA) / total_voxels # compute brain voxels detected as a percentage of whole
-    face_voxels = 100* np.sum(maskB) / total_voxels # compute face voxels detected as a percentage of whole
+    # total_voxels = og_image_rsos.shape[0] * og_image_rsos.shape[1] * og_image_rsos.shape[2]
+    brain_voxels = np.sum(maskA) # compute brain voxels detected as a percentage of whole image
     
+    # perform brain segmentation on defaced image to find resulting brain volume 
+    gen_mask(f'results/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain:.2}_face={face_retain:.2}.nii.gz', f'segmentations/defaced_mask_{dataID}', dataID)
+
+    defaced_brain_mask = nib.load(f'segmentations/defaced_mask_{dataID}/brain.nii.gz').get_fdata()
+    defaced_brain_voxels = np.sum(defaced_brain_mask)
+
     # appened information to a text file to log output metrics
     new_log = pd.DataFrame({
     'Data ID': [dataID],
+    'Masking Method': [mask_scheme],
+    'Coil Thresholding Method': [method],
+    'Thresholding Value': [threshold],
     'Virtual Coils Retained (#)': [top_eigenvec],
-    'Brain Volume Detected (%)': [brain_voxels],
-    'Face Volume Detected (%)': [face_voxels],
+    'Brain Voxels Before Defacing (#)': [brain_voxels],
+    'Brain Voxels After Defacing (#)': [defaced_brain_voxels],
     'Brain Signal Retained (%)': [brain_retain],
     'Face Signal Retained (%)': [face_retain],
     })
     
     new_log.to_csv('output_log.txt', mode='a', header= not os.path.exists('output_log.txt'), sep='\t')
 
+
+def batch_deface():
+    pass
 
 if __name__ == "__main__": 
     import argparse
@@ -411,5 +446,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_raw_deface(args.config)
-
-    
