@@ -7,7 +7,11 @@ import scipy as sp
 from scipy.linalg import orth
 from scipy.linalg import norm
 from skimage.morphology import convex_hull_image 
-from skimage.morphology import binary_erosion 
+# from skimage.morphology import binary_erosion 
+from scipy.ndimage import binary_erosion
+from scipy.ndimage import binary_dilation
+
+from skimage.draw import line_nd
 import matplotlib
 import pandas as pd
 
@@ -116,27 +120,98 @@ def set_masks(ROI, interference, option, gap=10):
     # ============================== OPTION C ==============================
     # find lowest and most anterior points of brain, draw a tangent 
     if option == "C":
-        maskA = ROI
-        x_brain, y_brain, z_brain = np.where(ROI) # get brain voxel positions along each axes
+        maskA = convex_hull_image(ROI).astype(int)
+        _, y_brain, z_brain = np.where(maskA) # get brain voxel positions along each axes
+        pattern = np.zeros(maskA.shape[1:3])
         zmin = np.min(z_brain) # get the most inferior brain voxel position
-        ymax = np.min(y_brain) # get the most anterior brain voxel position 
+        ymax = np.max(y_brain) # get the most anterior brain voxel position 
 
-        m = ymax
+        y_at_zmin = y_brain[z_brain == zmin][0]
+        z_at_ymax = z_brain[y_brain == ymax][0]
+
         # define a tangent going through the two points, fill everything below it 
-        np.linspace
+        slope = (z_at_ymax - zmin)/(ymax - y_at_zmin)
 
-        # fill all x slices with
+        # edges of image
+        y_edge = maskA.shape[1] - 1 # right edge of slice
+        z_edge = maskA.shape[2] - 1 # top edge of slice
+
+        y0 = 0 # left of slice
+        z_at_y0 = zmin + slope * (y0 - y_at_zmin)
+
+        if z_at_y0 < 0: # z = 0 before y = 0 
+            z_at_y0 = 0 
+            y0 = (z_at_y0 - zmin) / slope + y_at_zmin
+        elif z_at_y0 > z_edge: # z = edge before y = edge
+            z_at_y0 = z_edge
+            y0 = (z_at_y0 - zmin) / slope + y_at_zmin
+
+        start = (y0, z_at_y0) # left most point of line 
+
+        z_at_y_edge = zmin + slope *(y_edge - y_at_zmin)
+        if z_at_y_edge < 0:
+            z_at_y_edge = 0
+            y_edge = (z_at_y_edge - zmin) / slope + y_at_zmin
+        elif z_at_y_edge > z_edge:
+            z_at_y_edge = z_edge
+            y_edge = (z_at_y_edge - zmin) / slope + y_at_zmin
+        
+        stop = (y_edge, z_at_y_edge)
+
+        coords = line_nd(start, stop, endpoint=True)
+        pattern[tuple(coords)] = 1
+
+        for i in range(len(coords[0])):
+            y, z = coords[0][i], coords[1][i]
+            pattern[y, :z] = 1
+
+        maskB = np.stack([pattern]* maskA.shape[0], axis = 0) # stack to all x slices
+        
+        top_layer =[[False, False,  True],
+                        [False,  True,  False],
+                        [False, False,  False]]
+
+        middle_layer = [[False, False,  True],
+                        [False,  True,  False],
+                        [False, False,  False]]
+
+        bottom_layer = [[False, False,  True],
+                        [False,  True,  False],
+                        [False, False,  False]]
+        struct_elem = np.array([top_layer, middle_layer, bottom_layer], dtype=bool)
+
+        overlap = maskA.astype(bool) & maskB.astype(bool) 
+        while np.count_nonzero(overlap) != 0:
+            maskB = binary_erosion(maskB, structure=struct_elem)
+            overlap = maskA.astype(bool) & maskB.astype(bool) 
+
+        while gap > 0:
+            maskB = binary_erosion(maskB, structure=struct_elem)
+            gap -= 1
+
+        maskB = maskB.astype(np.uint8)
 
     # ============================== OPTION D ==============================
     # L-shaped face mask 
     if option == "D":
-        maskA = ROI
+        maskA = convex_hull_image(ROI).astype(int)
+        _, y_brain, z_brain = np.where(maskA) # get brain voxel positions along each axes
+
         zmin = np.min(z_brain) # get the most inferior brain voxel position
-        ymax = np.min(y_brain) # get the most anterior brain voxel position 
+        ymax = np.max(y_brain) # get the most anterior brain voxel position 
 
         maskB = np.zeros_like(ROI)
 
+        maskB[:, :, :(zmin-gap)] = 1
+        maskB[:, (ymax+gap//2):, :] = 1
+
     # ============================== OPTION E ==============================
+    # complementary masking
+    if option == "E": 
+        maskA = convex_hull_image(ROI).astype(int)
+        maskB = np.zeros_like(maskA)
+        complement_A = (~binary_dilation(maskA, iterations=gap)).astype(np.uint8)
+        maskB[:, (maskB.shape[1]//2):, :(maskB.shape[2]//2)] = complement_A[:, (maskB.shape[1]//2):, :(maskB.shape[2]//2)]
 
     return maskA, maskB
 
@@ -176,16 +251,17 @@ def make_A_B(image, nc, maskA, maskB):
     return (A, B)
 
 def by_channel_fft(data): 
-    # fft by channels and compute 3d image right away, 
-    # getting rid of channel dimension right away
-    rsos_image = np.zeros(data.shape[:3])
+    # perform fft by channels and compute rsos image right away 
+    # to bypass saving new array with all channel dimensions
+    # for optimizing calculations for memory
+
+    rsos_image = np.zeros(data.shape[:3]) # make empty array to store rsos image
     for ch in range(data.shape[3]):
+        # compute fft for current channel
         ch_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(data[:, :, :, ch], axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
-        rsos_image += np.abs(ch_image)**2
-    rsos_image = np.sqrt(rsos_image)
+        rsos_image += np.abs(ch_image)**2 # compute sum of squares
+    rsos_image = np.sqrt(rsos_image) # compute root sum of squares
     return rsos_image
-
-
 
 
 def run_raw_deface(config='config.json'):
