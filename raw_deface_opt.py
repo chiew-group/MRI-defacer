@@ -208,10 +208,13 @@ def set_masks(ROI, interference, option, gap=10):
     # ============================== OPTION E ==============================
     # complementary masking
     if option == "E": 
-        maskA = convex_hull_image(ROI).astype(int)
+        maskA = binary_dilation(ROI, iterations=8).astype(np.uint8)
+        maskA = convex_hull_image(maskA).astype(int)
         maskB = np.zeros_like(maskA)
         complement_A = (~binary_dilation(maskA, iterations=gap)).astype(np.uint8)
-        maskB[:, (maskB.shape[1]//2):, :(maskB.shape[2]//2)] = complement_A[:, (maskB.shape[1]//2):, :(maskB.shape[2]//2)]
+        y_bound = int(maskB.shape[1]*0.7)
+        z_bound = int(maskB.shape[2]*0.7)
+        maskB[:, y_bound:, :z_bound] = complement_A[:, y_bound:, :z_bound]
 
     return maskA, maskB
 
@@ -483,6 +486,9 @@ def run_raw_deface(config='config.json'):
 
     mask_scheme = inputs["masks"]["manipulation"] if "manipulation" in inputs["masks"] else None
     quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, mask_scheme, method, threshold)
+
+    return nc, data, dataID, og_image, og_image_rsos
+
 
 def quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, mask_scheme, method, threshold):
     
