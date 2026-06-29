@@ -7,7 +7,7 @@ We use the region-optmized virtual coils (ROVir) [[1]](#1-kim-d-cauley-sf-nayak-
 
 (1) We make an initial reconstruction to define the brain and face regions.
 
-(2) We employ TotalSegmentator's face_mr and total_mr tasks [[2]](#2-wasserthal-j-breit-h-c-meyer-mt-pradella-m-hinck-d-sauter-aw-heye-t-boll-d-cyriac-j-yang-s-bach-m-segeroth-m-2023-totalsegmentator-robust-segmentation-of-104-anatomic-structures-in-ct-images-radiology-artificial-intelligence-httpsdoiorg101148ryai230024) to automatically generate a mask for the face and brain regions. We manipulate these masks to simplify their geometry and create space between them to optimize masking for the ROVir framework.
+(2) We employ ANTsPy and ANT[[2]](#2-wasserthal-j-breit-h-c-meyer-mt-pradella-m-hinck-d-sauter-aw-heye-t-boll-d-cyriac-j-yang-s-bach-m-segeroth-m-2023-totalsegmentator-robust-segmentation-of-104-anatomic-structures-in-ct-images-radiology-artificial-intelligence-httpsdoiorg101148ryai230024) to automatically generate a mask for the face and brain regions. We manipulate these masks to simplify their geometry and create space between them to optimize masking for the ROVir framework.
 
 (3) We define a ROVir transform based on these masks. This transform mixes the original measurement coils to form virtual coils, with signal concentrated in either the brain or face regions. You can see the effect in [demo.ipynb](demo.ipynb), where the virtual coils are displayed.
 
@@ -163,9 +163,15 @@ If the current shape of the data is not the required data.shape = (x, y, z, ch),
 The user may want to take the raw output from the segmentation (in which case the manipulation parameter can be omitted), or explore the different mask manipulation schemes. The available options are no manipulations (when parameter is unspecified in config file), "A", and "B". An example of mask manipulation schemes "A" and "B" is shown in the [demo_64ch.ipynb](demo_64ch.ipynb) notebook.
 
 ## Example Usage
-After running main.py, the final defaced k-space data should exist in a folder named **results** as **defaced_{dataID}.npy**. You can see example outputs in the [demo.ipynb](demo.ipynb) Notebook. The example uses a fully sampled 12-channel dataset from Calgary Campinas [[3]](#3-r-souza-et-al-an-open-multi-vendor-multi-field-strength-brain-mr-dataset-and-analysis-of-publicly-available-skull-stripping-methods-agreement-neuroimage-vol-170-pp-482494-apr-2018-doi-httpsdoiorg101016jneuroimage201708021) preprocessed to be oriented as outlined in [Expected Input](#expected-input) and our default parameters in config.json. 
+After running 
+```
+python raw_deface.py --config config.json
+```
+the final defaced k-space data should exist in a folder named **results** as **defaced_{dataID}.npy**. You can see example outputs in the [demo.ipynb](demo.ipynb) notebook. This example uses a fully sampled 12-channel dataset from Calgary Campinas [[3]](#3-r-souza-et-al-an-open-multi-vendor-multi-field-strength-brain-mr-dataset-and-analysis-of-publicly-available-skull-stripping-methods-agreement-neuroimage-vol-170-pp-482494-apr-2018-doi-httpsdoiorg101016jneuroimage201708021) preprocessed to be oriented as outlined in [Expected Input](#expected-input) and our default parameters in config.json. 
 
-The example uses a fully sample 64-channel dataset that can be found here: https://huggingface.co/datasets/lyx228/Fully_Sampled_MRI/tree/main. 
+Another example is in the [demo_64ch.ipynb](demo_64ch.ipynb) notebook. This example uses a fully sampled 64-channel dataset made available here: https://huggingface.co/datasets/lyx228/Fully_Sampled_MRI/tree/main. 
+
+Users can also use the interactive notebook [interactive.ipynb](interactive.ipynb) to observe live the impacts of changing parameters such as the number of virtual coils used to form the final aia
 
 
 ## More Options for Developers & Troubleshooting
