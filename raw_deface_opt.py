@@ -429,7 +429,7 @@ def run_raw_deface(config='config.json'):
         eigenvecs.append(eigenvec) # append eigenvec for current slice
     
         if "top_coils" not in inputs["coil_selection"]: # choose based on heuristics the number of eigenvectors to retain
-            cur_top_eigenvec = top_nv(eigenvec, nc, A, B, method, threshold, inputs["visualization"]["plt_on"])
+            cur_top_eigenvec = top_nv(eigenvec, nc, A, B, method, threshold, inputs["visualization"]["graph"])
             num_top_eigenvecs.append(cur_top_eigenvec) # append recommended number of top eigenvecs to retain
 
     from collections import Counter
