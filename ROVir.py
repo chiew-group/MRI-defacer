@@ -208,9 +208,10 @@ def form_virtual_coil_data(top_eigenvec, data):
     '''
 
     nv = top_eigenvec.shape[1] # number of top eigenvectors = number of virtual coils
-    new_data = np.zeros((data.shape[0], data.shape[1], nv, data.shape[2]), dtype = data.dtype)
+    new_data = np.zeros((data.shape[0], data.shape[1], nv), dtype = data.dtype)
 
-    new_data = np.tensordot(data, top_eigenvec, axes = ([3], [0])) 
+    new_data = np.tensordot(data, top_eigenvec, axes = ([-1], [0]))
+
     # lin combo of original coil data with lin combo weights as coef
     # (x, y, ch, z) * (ch, nv) = (x, y, z, nv)
     return new_data

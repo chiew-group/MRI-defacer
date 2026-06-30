@@ -32,7 +32,7 @@ RED = '\033[91m'
 GREEN = '\033[92m'
 RESET = '\033[0m'
 
-def rsos(image):
+def rsos(image, axis):
     '''
     Computes the root sum of squares of the image across the channel dimension.
     
@@ -45,7 +45,7 @@ def rsos(image):
         np.ndarray: a 3D array of the root sum of squares of the data, shape (x, y, z)
     '''
     
-    return np.sqrt(np.sum(np.abs(image)**2, axis=3))
+    return np.sqrt(np.sum(np.abs(image)**2, axis=axis))
 
 
 def set_masks(ROI, interference, option, gap=10):
@@ -236,36 +236,15 @@ def make_A_B(image, nc, maskA, maskB):
 
     '''
 
-    A = np.zeros((nc, nc), dtype=np.complex128) # array to store A covariance matrix
-    B = np.zeros((nc, nc), dtype=np.complex128) # array to store B covariance matrix
+    maskedA = image*maskA[:, :, None]
+    maskedB = image*maskB[:, :, None]
+    print(maskedA.shape)
 
-    for z_slice in range(image.shape[2]): # calculate covariance matrices slice by slice
-        cur_slice = image[:, :, z_slice, :] # get current z slice
-        maskA_slice = maskA[:, :, z_slice] # get current maskA (brain) for z slice
-        maskB_slice = maskB[:, :, z_slice] # get current maskB (face) for z slice
-
-        maskedA_slice = cur_slice * maskA_slice[:, :, None] # apply brain mask to z slice of image  
-        maskedB_slice = cur_slice * maskB_slice[:, :, None] # apply face mask to z slice of image
-
-        # dot product over x and y axes, then sum over z axis to find covariance
-        A += np.tensordot(np.conj(maskedA_slice), maskedA_slice, axes=([0,1],[0,1]))
-        B += np.tensordot(np.conj(maskedB_slice), maskedB_slice, axes=([0,1],[0,1]))
+    # dot product over x and y axes, then sum over z axis to find covariance
+    A = np.tensordot(np.conj(maskedA), maskedA, axes=([0,1],[0,1]))
+    B = np.tensordot(np.conj(maskedB), maskedB, axes=([0,1],[0,1]))
 
     return (A, B)
-
-def by_channel_fft(data): 
-    # perform fft by channels and compute rsos image right away 
-    # to bypass saving new array with all channel dimensions
-    # for optimizing calculations for memory
-
-    rsos_image = np.zeros(data.shape[:3]) # make empty array to store rsos image
-    for ch in range(data.shape[3]):
-        # compute fft for current channel
-        ch_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(data[:, :, :, ch], axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
-        rsos_image += np.abs(ch_image)**2 # compute sum of squares
-    rsos_image = np.sqrt(rsos_image) # compute root sum of squares
-    return rsos_image
-
 
 def run_raw_deface(config='config.json'):
 
@@ -342,11 +321,11 @@ def run_raw_deface(config='config.json'):
     else:
         z_slice = data.shape[2]//2
 
-    # fourier transform and shift data, use scipy with overwriting 
+    # 1. INVERSE FFT ALONG ALL SPATIAL AXES, RSOS IMAGE, USED TO FIND THE FACE 
     og_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(data, axes = (0, 1, 2)), axes=(0, 1, 2), overwrite_x=True), axes = (0, 1, 2))
-    og_image_rsos = rsos(og_image) # calculate rsos of image
+    og_image_rsos = rsos(og_image, 3) # calculate rsos of image
 
-###
+    # if reference data exists, load it and process it
     if "reference_data" in inputs: 
         ref_data = np.load(inputs["reference_data"]["data_path"])
         ref_dataID = np.load(inputs["reference_data"]["data_id"])
@@ -374,9 +353,7 @@ def run_raw_deface(config='config.json'):
         
         # fourier transform and shift data 
         ref_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(ref_data, axes = (0, 1, 2)), axes=(0, 1, 2), overwrite_x=True), axes = (0, 1, 2))
-        ref_image_rsos = rsos(ref_image) # calculate rsos of image
-
-###
+        ref_image_rsos = rsos(ref_image, 3) # calculate rsos of image
 
     try:
         gap = int(inputs["masks"]["gap"])
@@ -384,19 +361,21 @@ def run_raw_deface(config='config.json'):
         print(RED + "Your gap is not a valid integer. Change in config.json." + RESET)
         exit()
 
+    # 2. GENERATE FACE AND BRAIN MASKS TO DEFINE THE ROVIR TRANSFORM
+    # auto generate masks if no predefined masks are given by the user
     if "face_mask" not in inputs["masks"] and "brain_mask" not in inputs["masks"]: 
 
+        # if reference data exists, generate mask based on it
         if "reference_data" in inputs:
             dataID = ref_dataID
             niftify(ref_image_rsos, abs(a11), abs(a22), abs(a33), f'input/input_image_{dataID}') # save nifti of image
             gen_mask(f'input/input_image_{dataID}.nii.gz', f'segmentations/output_mask_{dataID}', dataID) # send nifti image for segmentation
 
-        else:
+        else: # if no reference data, generate mask based on target data
             niftify(og_image_rsos, abs(a11), abs(a22), abs(a33), f'input/input_image_{dataID}') # save nifti of image
             gen_mask(f'input/input_image_{dataID}.nii.gz', f'segmentations/output_mask_{dataID}', dataID) # send nifti image for segmentation
         
-        #face_mask = np.load(f'segmentations/face_mask_{dataID}.npy') # load face mask
-        #brain_mask = np.load(f'segmentations/brain_mask_{dataID}.npy') # load brain mask
+        # load the saved face and brain masks
         face_mask = nib.load(os.path.join(f'segmentations/output_mask_{dataID}', "face.nii.gz")).get_fdata()
         brain_mask = nib.load(os.path.join(f'segmentations/output_mask_{dataID}', "brain.nii.gz")).get_fdata()
     
@@ -412,7 +391,7 @@ def run_raw_deface(config='config.json'):
         niftify(maskA, abs(a11), abs(a22), abs(a33), f'segmentations/output_mask_{dataID}/brain2.nii.gz')
         niftify(maskB, abs(a11), abs(a22), abs(a33), f'segmentations/output_mask_{dataID}/face2.nii.gz')
 
-    else:
+    else: # if no manipulation schemes are specified, use raw masks
         maskA = brain_mask
         maskB = face_mask
 
@@ -420,72 +399,107 @@ def run_raw_deface(config='config.json'):
 
     nc = ref_data.shape[-1] if "reference_data" in inputs else data.shape[-1] # get total number of original coils
 
-    if "reference_data" in inputs:
-        brain_covar, face_covar = make_A_B(ref_image, nc, maskA, maskB) # create covariance matrices with reference data
-    else:
-        brain_covar, face_covar = make_A_B(og_image, nc, maskA, maskB) # create covariance matrices with input data
-
-    print(GREEN + "Brain and face covariance matrices have been computed" + RESET)
-
-    eigenvec = rovir(nc, brain_covar, face_covar) # finding the eigenvectors for (brain_covar)v = λ(face_covar)v
-    np.save(f'results/xfm_{dataID}.npy', eigenvec)
-    print(GREEN + "Eigenvectors computed" + RESET)
+    brain_covars = [] # to store the brain covariance matrix for each slice, list of nc x nc matrices
+    face_covars = [] # to store the face covariance matrix for each slice, list of nc x nc matrices
+    eigenvecs = [] # to store the eigenvectors for each slice, list of nc x nc matrices
+    num_top_eigenvecs = [] # to store the recommended number of top eigenvectors for each slice, list of integers
     
-    if inputs["visualization"]["plt_on"] == True:
-        if inputs["visualization"]["compare_retention"] == True:
-            compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice) # visualize comparison between different # of coils retained
-        if inputs["visualization"]["show_virtual_coils"] == True:
-            show_virtual_coils(data, eigenvec, x_slice) # visualize all individual virtual coils
-
     method = inputs["coil_selection"]["threshold_method"] # load method/metric for selecting top coils
     threshold = inputs["coil_selection"]["threshold_value"] # load limit/requirement for selecting top coils
-    
-    if "top_coils" not in inputs["coil_selection"]: # choose based on heuristics the number of eigenvectors to retain
-        top_eigenvec = top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, inputs["visualization"]["plt_on"])
-    
-    else: # if user specifies the number of top virtual coils to keep, use that 
-        top_eigenvec = inputs["coil_selection"]["top_coils"]
 
-    print(f'The top nv eigenvectors contain the first {top_eigenvec} eigenvectors')
-    eigenvec_retain = eigenvec[:,:top_eigenvec] # retain only the top eigenvectors 
-    eigenvec_retain = orth(eigenvec_retain) # orthonormalize retained eigenvectors to noise-whiten
-
-    orth_proj = eigenvec_retain @ eigenvec_retain.conj().T # find orthogonal projection matrix for span of retained eigenvectors
-   
-    # calculate signal retained from maskA region
-    brain_retain = (norm((orth_proj @ brain_covar @ orth_proj), ord = 'fro') / norm (brain_covar, ord = 'fro'))*100
-    print(GREEN + f'BRAIN SIGNAL RETAINED:{brain_retain}')
-
-    # calculate signal retained from maskB region
-    face_retain = (norm((orth_proj @ face_covar @ orth_proj), ord = 'fro') / norm (face_covar, ord = 'fro'))*100
-    print(f'FACE SIGNAL RETAINED:{face_retain}' + RESET)
+    # 3. COMPUTE THE ROVIR TRANSFORM SLICE BY SLICE
+    readout_axis = 0 # MAKE A CONFIG INPUT LATER???
     
-    # forming virtual coils, with eigenvectors as linear combo weights
-    virtual_coil_data = form_virtual_coil_data(eigenvec_retain, data) 
-    # print(virtual_coil_data.shape)
-    print(GREEN + f'Virtual coils successfully formed' + RESET)
+    if "reference_data" in inputs: # compute hybrid inverse fft using reference data 
+        hybrid_fft = sp.fft.fftshift(sp.fft.ifft(sp.fft.fftshift(ref_data, axes = (readout_axis)), axis=readout_axis, overwrite_x=True), axes = (readout_axis))
+    else: # compute hybrid inverse fft using target data
+        hybrid_fft = sp.fft.fftshift(sp.fft.ifft(sp.fft.fftshift(data, axes = (readout_axis)), axis=readout_axis, overwrite_x=True), axes = (readout_axis))
+    
+    # for each readout slice, find the recommended number of top eigenvectors and the eigenvectors
+    for slice_num in range(data.shape[readout_axis]): # loop through slices in the readout direction
+        
+        slice = hybrid_fft[slice_num, :, :, :] # get a single slice in readout direction, shape (ky, kz, ch)
+        full_fft = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(slice, axes = (0,1)), axes=(0,1), overwrite_x=True), axes = (0,1)) # get image, shape (y, z, ch)
+
+        A, B = make_A_B(full_fft, nc, maskA[slice_num, :, :], maskB[slice_num, :, :]) # compute covariance matrices from slice image
+        brain_covars.append(A) # append brain covariance matrix for current slice
+        face_covars.append(B) # append face covariance matrix for current slice
+
+        eigenvec = rovir(nc, A, B) # finding the eigenvectors for (brain_covar)v = λ(face_covar)v
+        eigenvecs.append(eigenvec) # append eigenvec for current slice
+    
+        if "top_coils" not in inputs["coil_selection"]: # choose based on heuristics the number of eigenvectors to retain
+            cur_top_eigenvec = top_nv(eigenvec, nc, A, B, method, threshold, inputs["visualization"]["plt_on"])
+            num_top_eigenvecs.append(cur_top_eigenvec) # append recommended number of top eigenvecs to retain
+
+    from collections import Counter
+
+    if "top_coils" in inputs["coil_selection"]: # if user specifies the number of top virtual coils to keep, use that 
+            top_eigenvec = inputs["coil_selection"]["top_coils"]
+    else: # if using the automated version, decide on unified number of top eigenvecs to retain
+        counter = Counter(num_top_eigenvecs)
+        top_eigenvec = counter.most_common(1)[0][0] # use the most commen recommendation 
+    
+    print(GREEN + f'The top {top_eigenvec} eigenvectors will be retained.' + RESET)
+
+    brain_retained = [] # to store the brain retention signal for each slice
+    face_retained = [] # to store the face retention signal for each slice
+    virtual_coil_data_all_slices = [] # to store the virtual coil data for each slice, a list of (ky, kz, ch) matrices
+
+    # for each readout slice, compute the virtual coil information 
+    for slice_num in range(data.shape[readout_axis]):
+
+        eigenvec = eigenvecs[slice_num] # load the eigenvectors for the current slice
+
+        eigenvec_retain = eigenvec[:,:top_eigenvec] # retain only the top eigenvectors 
+        eigenvec_retain = orth(eigenvec_retain) # orthonormalize retained eigenvectors to noise-whiten
+
+        orth_proj = eigenvec_retain @ eigenvec_retain.conj().T # find orthogonal projection matrix for span of retained eigenvectors
+    
+        # calculate signal retained from maskA region
+        cur_brain_retain = (norm((orth_proj @ brain_covars[slice_num] @ orth_proj), ord = 'fro') / norm (brain_covars[slice_num], ord = 'fro'))*100
+        brain_retained.append(cur_brain_retain)
+
+        # calculate signal retained from maskB region
+        cur_face_retain = (norm((orth_proj @ face_covars[slice_num] @ orth_proj), ord = 'fro') / norm (face_covars[slice_num], ord = 'fro'))*100
+        face_retained.append(cur_face_retain)
+    
+        # forming virtual coils, with eigenvectors as linear combo weights
+        slice = hybrid_fft[slice_num, :, :, :] # get current slice, shape (ky, kz, ch)
+        cur_virtual_coil_data = form_virtual_coil_data(eigenvec_retain, slice) # form virtual coils for this slice
+        virtual_coil_data_all_slices.append(cur_virtual_coil_data) 
+
+
+    mean_brain_retain = np.mean(brain_retained)
+    mean_face_retain = np.mean(face_retained)
+
+    print(GREEN + f'Mean Brain Signal Retention: {mean_brain_retain}')
+    print(f'Mean Face Signal Retention: {mean_face_retain}' + RESET)
+
+    virtual_hybrid = np.stack(virtual_coil_data_all_slices, axis=0) # stack along the x axis to form (x, ky, kz, nv)
+    # fft along the readout axis to obtain fully spatial frequency defaced data
+    virtual_coil_data = sp.fft.fftshift(sp.fft.fft(sp.fft.fftshift(virtual_hybrid, axes = (readout_axis)), axis=readout_axis, overwrite_x=True), axes = (readout_axis))
 
     # save final defaced raw data
     if inputs["output"]["save_defaced_kspace"] == True:
         np.save(f'results/defaced_{dataID}.npy', virtual_coil_data)
-
         
     ####################################################################
     # FOLLOWING CODE IS FOR VISUALIZATION OF FINAL RESULT
 
     # compute image from virtual coil data
-    defaced_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(virtual_coil_data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
-    defaced_image = rsos(defaced_image) # find rsos of virtual coil image data
+    defaced_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_coil_data, axes = (0, 1, 2)), axes=(0, 1, 2), overwrite_x=True), axes = (0, 1, 2))
+    defaced_image = rsos(defaced_image, 3) # find rsos of virtual coil image data
 
     if inputs["visualization"]["plt_on"]:
-        display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, brain_retain, face_retain) # display images
+        display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, mean_brain_retain, mean_face_retain) # display images
     
     # save nifti of results for visualization in 3DSlicer
     if inputs["output"]["save_defaced_image"] == True:
-        niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'results/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain:.2}_face={face_retain:.2}')
+        niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'results/defaced_{dataID}_n={top_eigenvec}_brain={mean_brain_retain:.2}_face={mean_face_retain:.2}')
 
     mask_scheme = inputs["masks"]["manipulation"] if "manipulation" in inputs["masks"] else None
-    quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, mask_scheme, method, threshold)
+    quality_log(dataID, top_eigenvec, mean_brain_retain, mean_face_retain, maskA, mask_scheme, method, threshold)
 
     return nc, data, dataID, og_image, og_image_rsos
 
@@ -516,9 +530,6 @@ def quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, mask_sch
     
     new_log.to_csv('output_log.txt', mode='a', header= not os.path.exists('output_log.txt'), sep='\t')
 
-
-def batch_deface():
-    pass
 
 if __name__ == "__main__": 
     import argparse
