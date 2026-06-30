@@ -7,7 +7,7 @@ GREEN = '\033[92m'
 RESET = '\033[0m'
 
 
-def gen_mask(input_fp, output_fp, saveID):
+def gen_mask(input_fp, output_fp, modality):
         '''
         To generate numpy binary masks for the brain and face regions using ANTsPY and ANTsPyNet.
         
@@ -24,7 +24,7 @@ def gen_mask(input_fp, output_fp, saveID):
 
         os.makedirs(output_fp, exist_ok=True) # make an output directory to store outputs
 
-        brain_probability_mask = antspynet.utilities.brain_extraction(image=input, modality="t1") # get probability mask for brain
+        brain_probability_mask = antspynet.utilities.brain_extraction(image=input, modality=modality) # get probability mask for brain
         brain_bin_mask = ants.threshold_image(brain_probability_mask, low_thresh=0.5, high_thresh=1.0, binary=True) # get binary mask for brain
         ants.image_write(brain_bin_mask, os.path.join(output_fp, 'brain.nii.gz')) # save nifti of binary brain mask
 

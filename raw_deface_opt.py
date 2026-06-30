@@ -377,6 +377,7 @@ def run_raw_deface(config='config.json'):
         ref_image_rsos = rsos(ref_image) # calculate rsos of image
 
 ###
+    modality = inputs["input_data"]["modality"]
 
     try:
         gap = int(inputs["masks"]["gap"])
@@ -389,11 +390,11 @@ def run_raw_deface(config='config.json'):
         if "reference_data" in inputs:
             dataID = ref_dataID
             niftify(ref_image_rsos, abs(a11), abs(a22), abs(a33), f'input/input_image_{dataID}') # save nifti of image
-            gen_mask(f'input/input_image_{dataID}.nii.gz', f'segmentations/output_mask_{dataID}', dataID) # send nifti image for segmentation
+            gen_mask(f'input/input_image_{dataID}.nii.gz', f'segmentations/output_mask_{dataID}', modality) # send nifti image for segmentation
 
         else:
             niftify(og_image_rsos, abs(a11), abs(a22), abs(a33), f'input/input_image_{dataID}') # save nifti of image
-            gen_mask(f'input/input_image_{dataID}.nii.gz', f'segmentations/output_mask_{dataID}', dataID) # send nifti image for segmentation
+            gen_mask(f'input/input_image_{dataID}.nii.gz', f'segmentations/output_mask_{dataID}', modality) # send nifti image for segmentation
         
         #face_mask = np.load(f'segmentations/face_mask_{dataID}.npy') # load face mask
         #brain_mask = np.load(f'segmentations/brain_mask_{dataID}.npy') # load brain mask
@@ -485,18 +486,18 @@ def run_raw_deface(config='config.json'):
         niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'results/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain:.2}_face={face_retain:.2}')
 
     mask_scheme = inputs["masks"]["manipulation"] if "manipulation" in inputs["masks"] else None
-    quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, mask_scheme, method, threshold)
+    quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, mask_scheme, method, threshold, modality)
 
     return nc, data, dataID, og_image, og_image_rsos
 
 
-def quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, mask_scheme, method, threshold):
+def quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, mask_scheme, method, threshold, modality):
     
     # total_voxels = og_image_rsos.shape[0] * og_image_rsos.shape[1] * og_image_rsos.shape[2]
     brain_voxels = np.sum(maskA) # compute brain voxels detected as a percentage of whole image
     
     # perform brain segmentation on defaced image to find resulting brain volume 
-    gen_mask(f'results/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain:.2}_face={face_retain:.2}.nii.gz', f'segmentations/defaced_mask_{dataID}', dataID)
+    gen_mask(f'results/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain:.2}_face={face_retain:.2}.nii.gz', f'segmentations/defaced_mask_{dataID}', modality)
 
     defaced_brain_mask = nib.load(f'segmentations/defaced_mask_{dataID}/brain.nii.gz').get_fdata()
     defaced_brain_voxels = np.sum(defaced_brain_mask)
