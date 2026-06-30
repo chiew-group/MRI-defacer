@@ -27,9 +27,15 @@ def gen_mask(input_fp, output_fp, modality):
         brain_probability_mask = antspynet.utilities.brain_extraction(image=input, modality=modality) # get probability mask for brain
         brain_bin_mask = ants.threshold_image(brain_probability_mask, low_thresh=0.5, high_thresh=1.0, binary=True) # get binary mask for brain
         ants.image_write(brain_bin_mask, os.path.join(output_fp, 'brain.nii.gz')) # save nifti of binary brain mask
-
+        
         whole_head_np = whole_head.numpy().astype(bool) 
         brain_bin_mask_np = brain_bin_mask.numpy().astype(bool)
+
+        # lobes = antspynet.desikan_killiany_tourville_labeling(t1=input, do_preprocessing=True, return_probability_images=False,
+        #                                                              do_lobar_parcellation=True, version=0, verbose=False)
+        
+        # frontal_lobe_mask = ((lobes['lobar_parcellation']).numpy() == 1).astype(np.uint8)
+        # ants.image_write(frontal_lobe_mask, os.path.join(output_fp, 'frontal_lobe.nii.gz'))
 
         face_np = whole_head_np & ~brain_bin_mask_np # logical AND NOT to find the face mask
 
