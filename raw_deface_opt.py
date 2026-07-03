@@ -216,6 +216,19 @@ def set_masks(ROI, interference, option, gap=10):
         z_bound = int(maskB.shape[2]*0.7)
         maskB[:, y_bound:, :z_bound] = complement_A[:, y_bound:, :z_bound]
 
+    
+    # ============================== OPTION F ==============================
+    # complementary masking
+    if option == "F": 
+        maskA = binary_dilation(ROI, iterations=10).astype(np.uint8)
+        maskA = convex_hull_image(maskA).astype(int)
+        maskB = np.zeros_like(maskA)
+        complement_A = (~binary_dilation(maskA, iterations=gap)).astype(np.uint8)
+        y_bound = int(maskB.shape[1]*0.95)
+        z_bound = int(maskB.shape[2]*0.55)
+        maskB[:, y_bound:, :z_bound] = complement_A[:, y_bound:, :z_bound]
+
+        
     return maskA, maskB
 
 def make_A_B(image, nc, maskA, maskB):
