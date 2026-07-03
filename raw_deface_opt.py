@@ -216,6 +216,20 @@ def set_masks(ROI, interference, option, gap=10):
         z_bound = int(maskB.shape[2]*0.7)
         maskB[:, y_bound:, :z_bound] = complement_A[:, y_bound:, :z_bound]
 
+    # ============================== OPTION F ==============================
+    # complementary masking
+    if option == "F": 
+        maskA = binary_dilation(ROI, iterations=10).astype(np.uint8)
+        maskA = convex_hull_image(maskA).astype(int)
+        maskB = np.zeros_like(maskA)
+        complement_A = (~binary_dilation(maskA, iterations=gap)).astype(np.uint8)
+        y_bound = int(maskB.shape[1]*0.95)
+        z_bound = int(maskB.shape[2]*0.55)
+        maskB[:, y_bound:, :z_bound] = complement_A[:, y_bound:, :z_bound]
+
+        #maybe use the whole head mask as boundary to make sure you are not erroding past the face?
+        # how do i make sure this genrealizes to all datasets? 
+
     return maskA, maskB
 
 def make_A_B(image, nc, maskA, maskB):
@@ -253,7 +267,7 @@ def make_A_B(image, nc, maskA, maskB):
 
     return (A, B)
 
-def by_channel_fft(data): 
+def compute_image(data): 
     # perform fft by channels and compute rsos image right away 
     # to bypass saving new array with all channel dimensions
     # for optimizing calculations for memory
@@ -474,9 +488,11 @@ def run_raw_deface(config='config.json'):
     ####################################################################
     # FOLLOWING CODE IS FOR VISUALIZATION OF FINAL RESULT
 
-    # compute image from virtual coil data
-    defaced_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(virtual_coil_data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
-    defaced_image = rsos(defaced_image) # find rsos of virtual coil image data
+    # # compute image from virtual coil data
+    # defaced_image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(virtual_coil_data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
+    # defaced_image = rsos(defaced_image) # find rsos of virtual coil image data
+
+    defaced_image = compute_image(virtual_coil_data) # use compute_image() to prevent memory issues
 
     if inputs["visualization"]["plt_on"]:
         display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, brain_retain, face_retain) # display images
@@ -516,10 +532,6 @@ def quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, mask_sch
     })
     
     new_log.to_csv('output_log.txt', mode='a', header= not os.path.exists('output_log.txt'), sep='\t')
-
-
-def batch_deface():
-    pass
 
 if __name__ == "__main__": 
     import argparse
