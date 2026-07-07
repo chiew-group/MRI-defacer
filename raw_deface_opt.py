@@ -123,6 +123,10 @@ def set_masks(ROI, interference, option, gap=10):
         maskA = convex_hull_image(ROI).astype(int)
         _, y_brain, z_brain = np.where(maskA) # get brain voxel positions along each axes
         pattern = np.zeros(maskA.shape[1:3])
+
+        maskA = convex_hull_image(maskA).astype(int)
+        maskA = binary_dilation(maskA, iterations=18).astype(np.uint8)
+
         zmin = np.min(z_brain) # get the most inferior brain voxel position
         ymax = np.max(y_brain) # get the most anterior brain voxel position 
 
@@ -221,14 +225,87 @@ def set_masks(ROI, interference, option, gap=10):
     if option == "F": 
         maskA = binary_dilation(ROI, iterations=10).astype(np.uint8)
         maskA = convex_hull_image(maskA).astype(int)
+        maskA = binary_dilation(maskA, iterations=8).astype(np.uint8)
         maskB = np.zeros_like(maskA)
         complement_A = (~binary_dilation(maskA, iterations=gap)).astype(np.uint8)
         y_bound = int(maskB.shape[1]*0.95)
-        z_bound = int(maskB.shape[2]*0.55)
+        z_bound = int(maskB.shape[2]*0.4)
         maskB[:, y_bound:, :z_bound] = complement_A[:, y_bound:, :z_bound]
 
         #maybe use the whole head mask as boundary to make sure you are not erroding past the face?
         # how do i make sure this genrealizes to all datasets? 
+
+
+    
+    # ============================== OPTION G ==============================
+    # find lowest and most anterior points of brain, draw a tangent 
+    if option == "G":
+        maskA = convex_hull_image(ROI).astype(int)
+        _, y_brain, z_brain = np.where(maskA) # get brain voxel positions along each axes
+        pattern = np.zeros(maskA.shape[1:3])
+
+        maskA = convex_hull_image(maskA).astype(int)
+        maskA = binary_dilation(maskA, iterations=18).astype(np.uint8)
+
+        ymax = np.max(y_brain) # get the most anterior brain voxel position 
+        z_at_ymax = z_brain[y_brain == ymax][0]
+
+        zmin = 0 
+        y_mid = maskA.shape[1]//2
+
+        # define a tangent going through the two points, fill everything below it 
+        slope = (z_at_ymax - zmin)/(ymax - y_mid)
+        
+        # left edge of image 
+        start = (y_mid, zmin)
+
+        # edges of image
+        y_edge = maskA.shape[1] - 1 # right edge of slice
+        z_edge = maskA.shape[2] - 1 # top edge of slice
+
+        z_at_y_edge = zmin + slope * (y_edge - y_mid)
+        if z_at_y_edge < 0:
+            z_at_y_edge = 0
+            y_edge = (z_at_y_edge - zmin) / slope + y_mid
+        elif z_at_y_edge > z_edge:
+            z_at_y_edge = z_edge
+            y_edge = (z_at_y_edge - zmin) / slope + y_mid
+        
+        stop = (y_edge, z_at_y_edge)
+
+        coords = line_nd(start, stop, endpoint=True)
+        pattern[tuple(coords)] = 1
+
+        for i in range(len(coords[0])):
+            y, z = coords[0][i], coords[1][i]
+            pattern[y, :z] = 1
+
+        maskB = np.stack([pattern]* maskA.shape[0], axis = 0) # stack to all x slices
+        
+        top_layer =[[False, False,  True],
+                        [False,  True,  False],
+                        [False, False,  False]]
+
+        middle_layer = [[False, False,  True],
+                        [False,  True,  False],
+                        [False, False,  False]]
+
+        bottom_layer = [[False, False,  True],
+                        [False,  True,  False],
+                        [False, False,  False]]
+        struct_elem = np.array([top_layer, middle_layer, bottom_layer], dtype=bool)
+
+        overlap = maskA.astype(bool) & maskB.astype(bool) 
+        while np.count_nonzero(overlap) != 0:
+            maskB = binary_erosion(maskB, structure=struct_elem)
+            overlap = maskA.astype(bool) & maskB.astype(bool) 
+
+        while gap > 0:
+            maskB = binary_erosion(maskB, structure=struct_elem)
+            gap -= 1
+
+        maskB = maskB.astype(np.uint8)
+
 
     return maskA, maskB
 
