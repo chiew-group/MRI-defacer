@@ -118,6 +118,16 @@ def display_defaced(og_image_rsos, defaced_image_rsos, x_slice, y_slice, z_slice
 
     plt.show()
 
+    
+    x_slices = og_image_rsos.shape[0]
+    (nrow, ncol) = closest_factors(x_slices)
+    for x_slice in range(1, x_slices):
+   
+        plt.subplot(nrow,ncol,x_slice+1)
+        plt.axis('off')
+        plt.imshow(np.rot90(ratio[x_slice, :, :]), cmap='RdYlGn', vmin=global_vmin, vmax=global_vmax)   
+    plt.show()
+
 def compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice):
     '''
     Visualizes the image retaining 1, 2, 3, ..., nc virtual coils to
