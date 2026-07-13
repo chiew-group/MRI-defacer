@@ -460,8 +460,10 @@ def run_raw_deface(config='config.json'):
         eigenvecs.append(eigenvec) # append eigenvec for current slice
     
         if "top_coils" not in inputs["coil_selection"]: # choose based on heuristics the number of eigenvectors to retain
-            cur_top_eigenvec = top_nv(eigenvec, nc, A, B, method, threshold, inputs["visualization"]["graph"])
+            cur_top_eigenvec = top_nv(eigenvec, nc, A, B, method, threshold, slice_num, inputs["visualization"]["graph"])
             num_top_eigenvecs.append(cur_top_eigenvec) # append recommended number of top eigenvecs to retain
+
+    np.save(f'results/{dataID}_eigenvecs.npy', eigenvecs)
 
     from collections import Counter
 
@@ -474,6 +476,17 @@ def run_raw_deface(config='config.json'):
 
     print(GREEN + f'The top {top_eigenvec} eigenvectors will be retained.' + RESET)
 
+    import matplotlib.pyplot as plt
+            # visualize metrics as scatterplots
+    print(len(num_top_eigenvecs))
+    print(data.shape[readout_axis])
+    plt.subplot(2,2,1)
+    plt.scatter(np.arange(data.shape[readout_axis]), num_top_eigenvecs, c = "blue")
+    plt.title("top eigenvecs for each x slice")
+    plt.xlabel("slice number")
+    plt.legend()
+    plt.autoscale(enable=True, axis='both', tight=False)
+    plt.show()
 
     virtual_coil_data_all_slices = [] # to store the virtual coil data for each slice, a list of (ky, kz, ch) matrices
   
@@ -526,6 +539,7 @@ def run_raw_deface(config='config.json'):
 
     virtual_hybrid = np.stack(virtual_coil_data_all_slices, axis=0) # stack along the x axis to form (x, ky, kz, nv)
     del virtual_coil_data_all_slices
+    
     # np.save(f'results/phase_align_test_t2_01.npy', virtual_hybrid)
     # exit()
 
@@ -554,7 +568,7 @@ def run_raw_deface(config='config.json'):
 
     mask_scheme = inputs["masks"]["manipulation"] if "manipulation" in inputs["masks"] else None
     quality_log(dataID, top_eigenvec, weighted_mean_brain_retain, weighted_mean_face_retain, maskA, mask_scheme, method, threshold)
-
+    
     return nc, data, dataID, og_image_rsos
     # return nc, data, dataID, og_image, og_image_rsos
 

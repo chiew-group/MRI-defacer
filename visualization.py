@@ -120,10 +120,11 @@ def display_defaced(og_image_rsos, defaced_image_rsos, x_slice, y_slice, z_slice
 
     x_slices = og_image_rsos.shape[0]
     (nrow, ncol) = closest_factors(x_slices)
-    for x_slice in range(1, x_slices):
+    for x_slice in range(0, x_slices):
    
         plt.subplot(nrow,ncol,x_slice+1)
         plt.axis('off')
+        plt.text(0, 0, f'{x_slice}', fontsize=6, color='black')
         plt.imshow(np.rot90(ratio[x_slice, :, :]), cmap='RdYlGn', vmin=global_vmin, vmax=global_vmax)   
     plt.show()
 

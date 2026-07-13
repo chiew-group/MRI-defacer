@@ -75,7 +75,7 @@ def elbow_finder(nc, metric, sensitivity, curve_type, curve_direction):
     print(kneedle.elbow, metric[int(kneedle.elbow)])
     return kneedle.elbow
 
-def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, plt_on=False):
+def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, slice, plt_on=False):
     '''
     Selects the top eigenvectors based on SIR, coil signal energy, coil interference energy, 
     ROI signal retention, or interference signal retention. 
@@ -145,7 +145,7 @@ def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, plt_on=Fals
 
     xaxis = np.arange(1, nc+1)
 
-    if plt_on:
+    if plt_on and (slice == 64 or slice == 65 or slice == 66):
 
         plt.figure(figsize=(16, 10), dpi=120)
 
