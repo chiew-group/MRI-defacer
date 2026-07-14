@@ -224,7 +224,7 @@ def set_masks(ROI, interference, option, gap=10):
         maskA = convex_hull_image(maskA).astype(int)
         maskB = np.zeros_like(maskA)
         complement_A = (~binary_dilation(maskA, iterations=gap)).astype(np.uint8)
-        y_bound = int(maskB.shape[1]*0.95)
+        y_bound = int(maskB.shape[1]*0.92)
         z_bound = int(maskB.shape[2]*0.55)
         maskB[:, y_bound:, :z_bound] = complement_A[:, y_bound:, :z_bound]
 
@@ -253,7 +253,6 @@ def make_A_B(image, nc, maskA, maskB):
     maskedB = image*maskB[:, :, None]
     # print(maskedA.shape)
 
-    # dot product over x and y axes, then sum over z axis to find covariance
     A = np.tensordot(np.conj(maskedA), maskedA, axes=([0,1],[0,1]))
     B = np.tensordot(np.conj(maskedB), maskedB, axes=([0,1],[0,1]))
 
@@ -273,6 +272,9 @@ def compute_image(data):
     rsos_image = np.sqrt(rsos_image) # compute root sum of squares
     return rsos_image
 
+def is_well_conditioned(matrix, tolerance=1e-6):
+    eigvals = np.linalg.eigvalsh(matrix) # compute eigenvalues
+    return eigvals[0] > tolerance * eigvals[-1]   # smallest eigenvalue meaningfully large relative to the biggest
 
 def run_raw_deface(config='config.json'):
 
@@ -439,7 +441,7 @@ def run_raw_deface(config='config.json'):
     threshold = inputs["coil_selection"]["threshold_value"] # load limit/requirement for selecting top coils
 
     # 3. COMPUTE THE ROVIR TRANSFORM SLICE BY SLICE
-    readout_axis = 0 # MAKE A CONFIG INPUT LATER???
+    readout_axis = 1 # MAKE A CONFIG INPUT LATER???
     
     if "reference_data" in inputs: # compute hybrid inverse fft using reference data 
         hybrid_fft = sp.fft.fftshift(sp.fft.ifft(sp.fft.fftshift(ref_data, axes = (readout_axis)), axis=readout_axis, overwrite_x=True), axes = (readout_axis))
@@ -449,14 +451,24 @@ def run_raw_deface(config='config.json'):
     # for each readout slice, find the recommended number of top eigenvectors and the eigenvectors
     for slice_num in range(data.shape[readout_axis]): # loop through slices in the readout direction
         
-        slice = hybrid_fft[slice_num, :, :, :] # get a single slice in readout direction, shape (ky, kz, ch)
-        full_fft = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(slice, axes = (0,1)), axes=(0,1), overwrite_x=True), axes = (0,1)) # get image, shape (y, z, ch)
+        slice = np.take(hybrid_fft, slice_num, axis=readout_axis)
 
-        A, B = make_A_B(full_fft, nc, maskA[slice_num, :, :], maskB[slice_num, :, :]) # compute covariance matrices from slice image
+        full_fft = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(slice, axes = (0,1)), axes=(0,1), overwrite_x=True), axes = (0,1)) # get image, shape (y, z, ch)
+            
+        A, B = make_A_B(full_fft, nc, np.take(maskA, slice_num, axis=readout_axis), np.take(maskB, slice_num, axis=readout_axis)) # compute covariance matrices from slice image
+
         brain_covars.append(A) # append brain covariance matrix for current slice
         face_covars.append(B) # append face covariance matrix for current slice
 
-        eigenvec = rovir(nc, A, B) # finding the eigenvectors for (brain_covar)v = λ(face_covar)v
+        if not is_well_conditioned(B) and is_well_conditioned(A) : # if B is rank-deficient and A is not 
+            eigenvec = rovir(nc, A, np.eye(nc, dtype=B.dtype)) # solve just Av = λv
+
+        elif not is_well_conditioned(B) and not is_well_conditioned(A): # if B and A are rank-deficient
+            eigenvec = np.eye(nc, dtype=A.dtype) # eigenvec for current slice is I so virtual coils for slice are original
+        
+        else:
+            eigenvec = rovir(nc, A, B) # finding the eigenvectors for (brain_covar)v = λ(face_covar)v
+        
         eigenvecs.append(eigenvec) # append eigenvec for current slice
     
         if "top_coils" not in inputs["coil_selection"]: # choose based on heuristics the number of eigenvectors to retain
@@ -475,18 +487,6 @@ def run_raw_deface(config='config.json'):
         top_eigenvec = max(num_top_eigenvecs)
 
     print(GREEN + f'The top {top_eigenvec} eigenvectors will be retained.' + RESET)
-
-    import matplotlib.pyplot as plt
-            # visualize metrics as scatterplots
-    print(len(num_top_eigenvecs))
-    print(data.shape[readout_axis])
-    plt.subplot(2,2,1)
-    plt.scatter(np.arange(data.shape[readout_axis]), num_top_eigenvecs, c = "blue")
-    plt.title("top eigenvecs for each x slice")
-    plt.xlabel("slice number")
-    plt.legend()
-    plt.autoscale(enable=True, axis='both', tight=False)
-    plt.show()
 
     virtual_coil_data_all_slices = [] # to store the virtual coil data for each slice, a list of (ky, kz, ch) matrices
   
@@ -523,21 +523,28 @@ def run_raw_deface(config='config.json'):
             cur_face_retain = (norm((orth_proj @ face_covars[slice_num] @ orth_proj), ord = 'fro') / norm(face_covars[slice_num], ord = 'fro'))*100
         else: cur_face_retain = 0
 
-        weight_brain_cur = np.sum(maskA[slice_num]) / np.sum(maskA) 
-        weight_face_cur = np.sum(maskB[slice_num]) / np.sum(maskB)
+        weight_brain_cur = np.sum(np.take(maskA, slice_num, axis=readout_axis)) / np.sum(maskA) 
+        weight_face_cur = np.sum(np.take(maskB, slice_num, axis=readout_axis)) / np.sum(maskB)
 
         weighted_mean_brain_retain += weight_brain_cur * cur_brain_retain
         weighted_mean_face_retain += weight_face_cur * cur_face_retain
 
         # forming virtual coils, with eigenvectors as linear combo weights
-        slice = hybrid_fft[slice_num, :, :, :] # get current slice, shape (ky, kz, ch)
+
+        if readout_axis == 0:
+            slice = hybrid_fft[slice_num, :, :, :] # get current slice, shape (ky, kz, ch)
+        elif readout_axis == 1: 
+            slice = hybrid_fft[:, slice_num, :, :] # get current slice, shape (ky, kz, ch)
+        elif readout_axis == 2:
+            slice = hybrid_fft[:, :, slice_num, :] # get current slice, shape (ky, kz, ch)
+            
         cur_virtual_coil_data = form_virtual_coil_data(eigenvec_retain, slice) # form virtual coils for this slice
         virtual_coil_data_all_slices.append(cur_virtual_coil_data) 
     
     print(GREEN + f'Mean Brain Signal Retention: {weighted_mean_brain_retain}')
     print(f'Mean Face Signal Retention: {weighted_mean_face_retain}' + RESET)
 
-    virtual_hybrid = np.stack(virtual_coil_data_all_slices, axis=0) # stack along the x axis to form (x, ky, kz, nv)
+    virtual_hybrid = np.stack(virtual_coil_data_all_slices, axis=readout_axis) # stack along the x axis to form (x, ky, kz, nv)
     del virtual_coil_data_all_slices
     
     # np.save(f'results/phase_align_test_t2_01.npy', virtual_hybrid)
