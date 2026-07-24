@@ -35,4 +35,4 @@ def niftify(image, a11, a22, a33, save_path):
     # saving the nifti file 
     fp = f'{save_path}.nii.gz'
     nib.save(nifti_img, fp)
-    print(GREEN + "Nifti file successfully saved" + RESET)
+    print(GREEN + "[UPDATE] Nifti file successfully saved to {fp}" + RESET)
