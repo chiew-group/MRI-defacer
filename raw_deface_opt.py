@@ -8,6 +8,7 @@ from scipy.linalg import orth
 from scipy.linalg import norm
 from skimage.morphology import convex_hull_image
 from skimage.filters import threshold_otsu
+from skimage.filters import apply_hysteresis_threshold
 # from skimage.morphology import binary_erosion 
 from scipy.ndimage import binary_erosion
 from scipy.ndimage import binary_dilation
@@ -41,6 +42,7 @@ def rsos(image, axis):
     Parameters
     ----------
         image -> np.ndarray: a 4D array of MRI image data, shape (x, y, z, ch)
+        axis -> int: the coil axis (0, 1, 2, or 3) to compute rsos along
 
     Returns
     ----------
@@ -217,7 +219,6 @@ def set_masks(ROI, interference, option, gap=10):
         y_bound = int(maskB.shape[1]*0.7)
         z_bound = int(maskB.shape[2]*0.7)
         maskB[:, y_bound:, :z_bound] = complement_A[:, y_bound:, :z_bound]
-
     
     # ============================== OPTION F ==============================
     # complementary masking
@@ -261,9 +262,20 @@ def make_A_B(image, nc, maskA, maskB):
 
 
 def compute_image(data): 
-    # perform fft by channels and compute rsos image right away 
-    # to bypass saving new array with all channel dimensions
-    # for optimizing calculations for memory
+    '''
+    Compute the IFFT by channel and feeds into rsos image immediately.
+    This is to bypass saving new arrays with all channel dimensions
+    to optimize calculations for memory. 
+
+    Parameters
+    ----------
+        data -> np.ndarray: the kspace data to be visualized.
+
+    Returns
+    ----------
+        rsos_image -> np.ndarray: the rsos image data to be visualized
+
+    '''
 
     rsos_image = np.zeros(data.shape[:3]) # make empty array to store rsos image
     for ch in range(data.shape[3]):
@@ -282,6 +294,7 @@ def regularization(matrix, tolerance=1e-6):
     epsilon = tolerance * eigvals[-1] 
     return matrix + epsilon * np.eye(matrix.shape[0], dtype=matrix.dtype)
 
+
 def run_raw_deface(config='config.json'):
 
     matplotlib.use('Qt5Agg')
@@ -299,7 +312,7 @@ def run_raw_deface(config='config.json'):
     data = np.load(inputs["input_data"]["data_path"]) 
     dataID = inputs["input_data"]["data_id"]
 
-    print(GREEN + "Data has been successfully loaded" + RESET)
+    print(GREEN + "[UPDATE] Data has been successfully loaded" + RESET)
 
     # flipping data based on affine
     a11 = float(inputs["input_data"]["a11"])
@@ -320,46 +333,40 @@ def run_raw_deface(config='config.json'):
     sorted_ind = np.argsort(x_y_z_ch)
     data = np.moveaxis(data, [0, 1, 2, 3], sorted_ind) 
 
-    # defining image slices to visualize  
+    # defining x image slice for visualization
     if "x_slice" in inputs["visualization"]:
         try:
             x_slice = int(inputs["visualization"]["x_slice"])
         except ValueError:
-            print(RED + "Your x slice is not a valid integer. Change in config.json." + RESET)
+            print(RED + "[ERROR] Your x slice is not a valid integer. Change in config.json." + RESET)
             exit() 
         if x_slice >= data.shape[0] or x_slice < -data.shape[0]:
-            print(RED + f"Your x slice is out of bounds for image shape: {data.shape}"  + RESET )
+            print(RED + f"[ERROR] Your x slice is out of bounds for image shape: {data.shape}"  + RESET )
             exit()
     else:
         x_slice = data.shape[0]//2
-    
+
+    # defining y image slice for visualization
     if "y_slice" in inputs["visualization"]:
-        try:
-            y_slice = int(inputs["visualization"]["y_slice"])
+        try: y_slice = int(inputs["visualization"]["y_slice"])
         except ValueError:
-            print(RED + "Your y slice is not a valid integer. Change in config.json." + RESET)
+            print(RED + "[ERROR] Your y slice is not a valid integer. Change in config.json." + RESET)
             exit() 
         if y_slice >= data.shape[1] or y_slice < -data.shape[1]:
-            print(RED + f"Your y slice is out of bounds for image shape: {data.shape}"  + RESET )
+            print(RED + f"[ERROR] Your y slice is out of bounds for image shape: {data.shape}"  + RESET )
             exit()   
-    else:
-        y_slice = data.shape[1]//2
+    else: y_slice = data.shape[1]//2
 
+    # defining z image slice for visualization
     if "z_slice" in inputs["visualization"]:
-        try:
-            z_slice = int(inputs["visualization"]["z_slice"])
+        try: z_slice = int(inputs["visualization"]["z_slice"])
         except ValueError:
-            print(RED + "Your z slice is not a valid integer. Change in config.json." + RESET)
+            print(RED + "[ERROR] Your z slice is not a valid integer. Change in config.json." + RESET)
             exit() 
         if z_slice >= data.shape[2] or z_slice < -data.shape[2]:
-            print(RED + f"Your z slice is out of bounds for image shape: {data.shape}"  + RESET )
+            print(RED + f"[ERROR] Your z slice is out of bounds for image shape: {data.shape}"  + RESET )
             exit()  
-    else:
-        z_slice = data.shape[2]//2
-
-    # 1. INVERSE FFT ALONG ALL SPATIAL AXES, RSOS IMAGE, USED TO FIND THE FACE 
-    # og_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(data, axes = (0, 1, 2)), axes=(0, 1, 2), overwrite_x=True), axes = (0, 1, 2))
-    og_image_rsos = compute_image(data) # calculate rsos of image
+    else: z_slice = data.shape[2]//2
 
     # if reference data exists, load it and process it
     if "reference_data" in inputs: 
@@ -391,13 +398,17 @@ def run_raw_deface(config='config.json'):
         ref_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(ref_data, axes = (0, 1, 2)), axes=(0, 1, 2), overwrite_x=True), axes = (0, 1, 2))
         ref_image_rsos = rsos(ref_image, 3) # calculate rsos of image
 
-    try:
-        gap = int(inputs["masks"]["gap"])
+    # define a gap that goes between the closest points of the brain and face mask
+    try: gap = int(inputs["masks"]["gap"])
     except ValueError:
-        print(RED + "Your gap is not a valid integer. Change in config.json." + RESET)
+        print(RED + "[ERROR] Your gap is not a valid integer. Change in config.json." + RESET)
         exit()
 
-    # 2. GENERATE FACE AND BRAIN MASKS TO DEFINE THE ROVIR TRANSFORM
+    # ================= 1. RECONSTRUCT IMAGE DATA ==========================================================
+    og_image_rsos = compute_image(data) # calculate rsos of image
+    # =====================================================================================================
+
+    # ================= 2. GENERATE FACE AND BRAIN MASKS TO DEFINE THE ROVIR TRANSFORM =====================
     # auto generate masks if no predefined masks are given by the user
     if "face_mask" not in inputs["masks"] and "brain_mask" not in inputs["masks"]: 
 
@@ -416,11 +427,11 @@ def run_raw_deface(config='config.json'):
         brain_mask = nib.load(os.path.join(f'segmentations/output_mask_{dataID}', "brain.nii.gz")).get_fdata()
     
     else: # using predefined masks
-        print(GREEN + "Using predefined masks" + RESET)
+        print(GREEN + "[UPDATE] Using predefined masks" + RESET)
         face_mask = nib.load(inputs["masks"]["face_mask"]).get_fdata() # load face mask
         brain_mask = nib.load(inputs["masks"]["brain_mask"]).get_fdata() # load brain mask
 
-    print(GREEN + "Mask has been successfully loaded" + RESET)
+    print(GREEN + "[UPDATE] Raw brain and face masks have been successfully loaded" + RESET)
 
     if "manipulation" in inputs["masks"]: # select and apply mask manipulation scheme
         maskA, maskB = set_masks(brain_mask, face_mask, inputs["masks"]["manipulation"], gap) # apply additional masking scheme
@@ -431,10 +442,12 @@ def run_raw_deface(config='config.json'):
         maskA = brain_mask
         maskB = face_mask
 
+    # cast to float 32 to prevent downstream upcasting whne mutliplying complex64
     maskA = maskA.astype(np.float32)
     maskB = maskB.astype(np.float32)
 
-    print(GREEN + "Masks have been prepared" + RESET)
+    print(GREEN + "[UPDATE] Masks have been processed and prepared" + RESET)
+    # =====================================================================================================
 
     nc = ref_data.shape[-1] if "reference_data" in inputs else data.shape[-1] # get total number of original coils
 
@@ -442,12 +455,12 @@ def run_raw_deface(config='config.json'):
     face_covars = [] # to store the face covariance matrix for each slice, list of nc x nc matrices
     eigenvecs = [] # to store the eigenvectors for each slice, list of nc x nc matrices
     num_top_eigenvecs = [] # to store the recommended number of top eigenvectors for each slice, list of integers
-    
+   
     method = inputs["coil_selection"]["threshold_method"] # load method/metric for selecting top coils
     threshold = inputs["coil_selection"]["threshold_value"] # load limit/requirement for selecting top coils
-
-    # 3. COMPUTE THE ROVIR TRANSFORM SLICE BY SLICE
     readout_axis = inputs["input_data"]["readout_axis"] # load readout axis, 0 = x, 1 = y, 2 = z
+
+    # ================= 3. COMPUTE THE ROVIR TRANSFORM SLICE BY SLICE ======================================
     
     if "reference_data" in inputs: # compute hybrid inverse fft using reference data 
         hybrid_fft = sp.fft.fftshift(sp.fft.ifft(sp.fft.fftshift(ref_data, axes = (readout_axis)), axis=readout_axis, overwrite_x=True), axes = (readout_axis))
@@ -466,45 +479,17 @@ def run_raw_deface(config='config.json'):
         brain_covars.append(A) # append brain covariance matrix for current slice
         face_covars.append(B) # append face covariance matrix for current slice
 
-
-        # #====== testing removing edge masks for better results? 
-
-        # check whether maskB overlaps ANY real head tissue at this slice, rather than
-        # trusting the antspynet-derived face segmentation (which unreliably misses the face).
-        # build a data-driven head/air split straight from this slice's own reconstructed
-        # signal (Otsu threshold on the rsos magnitude), independent of any prior segmentation.
-        # slice_rsos = np.sqrt(np.sum(np.abs(full_fft) ** 2, axis=-1))
-        # maskB_slice_bool = np.take(maskB, slice_num, axis=readout_axis).astype(bool)
-
-        # if np.any(maskB_slice_bool) and slice_rsos.max() > slice_rsos.min():
-        #     head_slice_bool = slice_rsos > threshold_otsu(slice_rsos) # data-driven "is this voxel part of the head" mask
-        #     overlap_voxels = np.sum(head_slice_bool & maskB_slice_bool)
-        # else:
-        #     overlap_voxels = 0
-
-        # if overlap_voxels == 0:
-        #     eigenvec = np.eye(nc, dtype=A.dtype) # maskB doesn't overlap any real head tissue here -- nothing to deface
-        #     # clear the face mask here so downstream weighting/visualization reflects "no real face"
-        #     if readout_axis == 0:
-        #         maskB[slice_num, :, :] = 0
-        #     elif readout_axis == 1:
-        #         maskB[:, slice_num, :] = 0
-        #     elif readout_axis == 2:
-        #         maskB[:, :, slice_num] = 0
-        #====== test over ====================================
     
+        # check the condition of matrix B to ensure no problems are faced in eigh
         if not is_well_conditioned(B) and is_well_conditioned(A) : # if B is rank-deficient and A is not 
             eigenvec = rovir(nc, A, np.eye(nc, dtype=B.dtype)) # solve just Av = λv
-
         elif not is_well_conditioned(B) and not is_well_conditioned(A): # if B and A are rank-deficient
             eigenvec = np.eye(nc, dtype=A.dtype) # eigenvec for current slice is I so virtual coils for slice are original
-        
-        else:
-            eigenvec = rovir(nc, A, B) # finding the eigenvectors for (brain_covar)v = λ(face_covar)v
-        
+        else: eigenvec = rovir(nc, A, B) # finding the eigenvectors for (brain_covar)v = λ(face_covar)v
+
         # if not is_well_conditioned(B) or not is_well_conditioned(A) : # if B is rank-deficient and A is not 
-        #     B = regularization(B)
-        # eigenvec = rovir(nc, A, B) 
+        #     B = regularization(A)
+        # eigenvec = rovir(nc, A, B)
 
         eigenvecs.append(eigenvec) # append eigenvec for current slice
     
@@ -523,7 +508,7 @@ def run_raw_deface(config='config.json'):
         # top_eigenvec = counter.most_common(1)[0][0] # use the most commen recommendation 
         top_eigenvec = max(num_top_eigenvecs)
 
-    print(GREEN + f'The top {top_eigenvec} eigenvectors will be retained.' + RESET)
+    print(GREEN + f'[UPDATE] The top {top_eigenvec} eigenvectors will be retained.' + RESET)
 
     virtual_coil_data_all_slices = [] # to store the virtual coil data for each slice, a list of (ky, kz, ch) matrices
     virtual_coil_data_all_slices_unaligned = [] # to store the virtual coil data pre-alignment for debugging 
@@ -586,43 +571,6 @@ def run_raw_deface(config='config.json'):
         virtual_coil_data_all_slices.append(cur_virtual_coil_data)
 
 
-    # # ==================== DEBUG: ratio before readout-axis FFT recombination ====================
-    # # Reconstructs slices 64/65/66 in isolation (2D ifft over ky,kz only, same as test2.py)
-    # # using the ALREADY branching+phase-aligned virtual coil data, but WITHOUT ever doing the
-    # # final fft(..., axis=readout_axis) that recombines all x-slices together (line ~554 below).
-    # # Compare these printed stats / this plot directly against test2.py's output for slices 64-66.
-    # import matplotlib.pyplot as plt
-    # debug_slices = [s for s in [64, 65, 66] if s < data.shape[readout_axis]]
-    # debug_ratios = {}
-    # for s in debug_slices:
-    #     orig_hybrid_slice = hybrid_fft[s, :, :, :] # (ky, kz, ch)
-    #     orig_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(orig_hybrid_slice, axes=(0, 1)), axes=(0, 1), overwrite_x=True), axes=(0, 1))
-    #     orig_rsos = np.sqrt(np.sum(np.abs(orig_img) ** 2, axis=2))
-
-    #     defaced_hybrid_slice = virtual_coil_data_all_slices[s] # (ky, kz, nv), pre-FFT-along-readout_axis
-    #     defaced_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(defaced_hybrid_slice, axes=(0, 1)), axes=(0, 1), overwrite_x=True), axes=(0, 1))
-    #     defaced_rsos = np.sqrt(np.sum(np.abs(defaced_img) ** 2, axis=2))
-
-    #     ratio_pre_fft = defaced_rsos / orig_rsos
-    #     debug_ratios[s] = ratio_pre_fft
-    #     print(GREEN + f"[pre-FFT ratio] slice {s}: min={np.nanmin(ratio_pre_fft):.4f} "
-    #                    f"mean={np.nanmean(ratio_pre_fft):.4f} max={np.nanmax(ratio_pre_fft):.4f}" + RESET)
-
-    # if debug_slices:
-    #     fig, axes = plt.subplots(1, len(debug_slices), figsize=(5 * len(debug_slices), 5))
-    #     if len(debug_slices) == 1:
-    #         axes = [axes]
-    #     im = None
-    #     for ax, s in zip(axes, debug_slices):
-    #         im = ax.imshow(np.rot90(debug_ratios[s]), cmap='RdYlGn', vmin=0, vmax=2)
-    #         ax.set_title(f'slice {s} (pre-readout-FFT ratio)')
-    #         ax.axis('off')
-    #     fig.colorbar(im, ax=axes, orientation='vertical', fraction=0.02)
-    #     plt.suptitle('Ratio maps BEFORE readout-axis FFT recombination')
-    #     plt.show()
-    # # ==================== END DEBUG ====================
-
-
     # ======== display virtual coils for unaligned stuff ============
 
     virtual_hybrid_unaligned = np.stack(virtual_coil_data_all_slices_unaligned, axis=readout_axis) # stack along the x axis to form (x, ky, kz, nv)
@@ -638,9 +586,11 @@ def run_raw_deface(config='config.json'):
     virtual_hybrid = np.stack(virtual_coil_data_all_slices, axis=readout_axis) # stack along the x axis to form (x, ky, kz, nv)
     
     del virtual_coil_data_all_slices
-    
-    # np.save(f'results/phase_align_test_t2_01.npy', virtual_hybrid)
-    # exit()
+
+    # save virtual hybrid data after phase alignment to check
+    np.save(f'results/phase_align_test_{dataID}.npy', virtual_hybrid)
+    print(f'Phase alignment test data saved.')
+    exit()
 
     # fft along the readout axis to obtain fully spatial frequency defaced data
     virtual_coil_data = sp.fft.fftshift(sp.fft.fft(sp.fft.fftshift(virtual_hybrid, axes = (readout_axis)), axis=readout_axis, overwrite_x=True), axes = (readout_axis))
@@ -653,16 +603,10 @@ def run_raw_deface(config='config.json'):
     # FOLLOWING CODE IS FOR VISUALIZATION OF FINAL RESULT
 
     # compute image from virtual coil data
-    # defaced_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_coil_data, axes = (0, 1, 2)), axes=(0, 1, 2), overwrite_x=True), axes = (0, 1, 2))
-    # defaced_image = rsos(defaced_image, 3) # find rsos of virtual coil image data
-
-    defaced_image = compute_image(virtual_coil_data) # use memory efficient way of computing defaced image
+    defaced_image = compute_image(virtual_coil_data) # compute rsos defaced image
 
     if inputs["visualization"]["plt_on"]:
         display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, weighted_mean_brain_retain, weighted_mean_face_retain) # display images
-
-    # if inputs["visualization"]["show_virtual_coils"]:
-    #     display_virtual_coils(virtual_coil_data, x_slice, 'Virtual Coils After Alignment', axis=0) # sagittal view
 
     virtual_coils_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_hybrid, axes = (0,1)), axes=(0, 1), overwrite_x=True), axes = (0, 1))
     display_virtual_coils(virtual_coils_img, 60, 'Virtual Coils After Alignment', axis=0) # sagittal view
@@ -757,3 +701,42 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_raw_deface(args.config)
+
+
+
+    
+    # # ==================== DEBUG: ratio before readout-axis FFT recombination ====================
+    # # Reconstructs slices 64/65/66 in isolation (2D ifft over ky,kz only, same as test2.py)
+    # # using the ALREADY branching+phase-aligned virtual coil data, but WITHOUT ever doing the
+    # # final fft(..., axis=readout_axis) that recombines all x-slices together (line ~554 below).
+    # # Compare these printed stats / this plot directly against test2.py's output for slices 64-66.
+    # import matplotlib.pyplot as plt
+    # debug_slices = [s for s in [64, 65, 66] if s < data.shape[readout_axis]]
+    # debug_ratios = {}
+    # for s in debug_slices:
+    #     orig_hybrid_slice = hybrid_fft[s, :, :, :] # (ky, kz, ch)
+    #     orig_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(orig_hybrid_slice, axes=(0, 1)), axes=(0, 1), overwrite_x=True), axes=(0, 1))
+    #     orig_rsos = np.sqrt(np.sum(np.abs(orig_img) ** 2, axis=2))
+
+    #     defaced_hybrid_slice = virtual_coil_data_all_slices[s] # (ky, kz, nv), pre-FFT-along-readout_axis
+    #     defaced_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(defaced_hybrid_slice, axes=(0, 1)), axes=(0, 1), overwrite_x=True), axes=(0, 1))
+    #     defaced_rsos = np.sqrt(np.sum(np.abs(defaced_img) ** 2, axis=2))
+
+    #     ratio_pre_fft = defaced_rsos / orig_rsos
+    #     debug_ratios[s] = ratio_pre_fft
+    #     print(GREEN + f"[pre-FFT ratio] slice {s}: min={np.nanmin(ratio_pre_fft):.4f} "
+    #                    f"mean={np.nanmean(ratio_pre_fft):.4f} max={np.nanmax(ratio_pre_fft):.4f}" + RESET)
+
+    # if debug_slices:
+    #     fig, axes = plt.subplots(1, len(debug_slices), figsize=(5 * len(debug_slices), 5))
+    #     if len(debug_slices) == 1:
+    #         axes = [axes]
+    #     im = None
+    #     for ax, s in zip(axes, debug_slices):
+    #         im = ax.imshow(np.rot90(debug_ratios[s]), cmap='RdYlGn', vmin=0, vmax=2)
+    #         ax.set_title(f'slice {s} (pre-readout-FFT ratio)')
+    #         ax.axis('off')
+    #     fig.colorbar(im, ax=axes, orientation='vertical', fraction=0.02)
+    #     plt.suptitle('Ratio maps BEFORE readout-axis FFT recombination')
+    #     plt.show()
+    # # ==================== END DEBUG ====================
