@@ -5,6 +5,7 @@ import numpy as np
 
 from scipy.linalg import orth
 from scipy.linalg import norm
+import scipy as sp
 
 from ROVir import form_virtual_coil_data
 
@@ -152,7 +153,7 @@ def compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice):
         virtual_coil_data = form_virtual_coil_data(eigenvec_retain, data) # form the virtual coil data with the top eigenvectors
 
         # compute the image data from the virtual coil data 
-        image = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(virtual_coil_data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
+        image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_coil_data, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
         image_rsos = np.sqrt(np.sum(np.abs(image)**2, axis=3))
         
         # calculate the percentage of signal retained from the brain and face regions
@@ -186,7 +187,7 @@ def show_virtual_coils(data, eigenvec, x_slice):
 
     # compute virtual coil data using all eigenvectors and image data with all virtual coils, without rsos
     all_coils = form_virtual_coil_data(eigenvec, data) # form all virtual coils from all eigenvectors
-    image_all_coils = np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(all_coils, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
+    image_all_coils = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(all_coils, axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
 
     # display each virtual coil's data
     (nr, nc) = closest_factors(all_coils.shape[3])
