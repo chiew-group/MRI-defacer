@@ -6,7 +6,8 @@ import numpy as np
 import scipy as sp
 from scipy.linalg import orth
 from scipy.linalg import norm
-from skimage.morphology import convex_hull_image 
+from skimage.morphology import convex_hull_image
+from skimage.filters import threshold_otsu
 # from skimage.morphology import binary_erosion 
 from scipy.ndimage import binary_erosion
 from scipy.ndimage import binary_dilation
@@ -22,6 +23,7 @@ from ROVir import form_virtual_coil_data
 from visualization import display_defaced
 from visualization import compare_retention
 from visualization import show_virtual_coils
+from visualization import closest_factors
 
 from to_nifti import niftify
 
@@ -224,11 +226,10 @@ def set_masks(ROI, interference, option, gap=10):
         maskA = convex_hull_image(maskA).astype(int)
         maskB = np.zeros_like(maskA)
         complement_A = (~binary_dilation(maskA, iterations=gap)).astype(np.uint8)
-        y_bound = int(maskB.shape[1]*0.92)
-        z_bound = int(maskB.shape[2]*0.55)
+        y_bound = int(maskB.shape[1]*0.95)
+        z_bound = int(maskB.shape[2]*0.5)
         maskB[:, y_bound:, :z_bound] = complement_A[:, y_bound:, :z_bound]
 
-        
     return maskA, maskB
 
 def make_A_B(image, nc, maskA, maskB):
@@ -275,6 +276,11 @@ def compute_image(data):
 def is_well_conditioned(matrix, tolerance=1e-6):
     eigvals = np.linalg.eigvalsh(matrix) # compute eigenvalues
     return eigvals[0] > tolerance * eigvals[-1]   # smallest eigenvalue meaningfully large relative to the biggest
+
+def regularization(matrix, tolerance=1e-6):
+    eigvals = np.linalg.eigvalsh(matrix) # compute eigenvalues
+    epsilon = tolerance * eigvals[-1] 
+    return matrix + epsilon * np.eye(matrix.shape[0], dtype=matrix.dtype)
 
 def run_raw_deface(config='config.json'):
 
@@ -441,7 +447,7 @@ def run_raw_deface(config='config.json'):
     threshold = inputs["coil_selection"]["threshold_value"] # load limit/requirement for selecting top coils
 
     # 3. COMPUTE THE ROVIR TRANSFORM SLICE BY SLICE
-    readout_axis = 1 # MAKE A CONFIG INPUT LATER???
+    readout_axis = inputs["input_data"]["readout_axis"] # load readout axis, 0 = x, 1 = y, 2 = z
     
     if "reference_data" in inputs: # compute hybrid inverse fft using reference data 
         hybrid_fft = sp.fft.fftshift(sp.fft.ifft(sp.fft.fftshift(ref_data, axes = (readout_axis)), axis=readout_axis, overwrite_x=True), axes = (readout_axis))
@@ -460,6 +466,33 @@ def run_raw_deface(config='config.json'):
         brain_covars.append(A) # append brain covariance matrix for current slice
         face_covars.append(B) # append face covariance matrix for current slice
 
+
+        # #====== testing removing edge masks for better results? 
+
+        # check whether maskB overlaps ANY real head tissue at this slice, rather than
+        # trusting the antspynet-derived face segmentation (which unreliably misses the face).
+        # build a data-driven head/air split straight from this slice's own reconstructed
+        # signal (Otsu threshold on the rsos magnitude), independent of any prior segmentation.
+        # slice_rsos = np.sqrt(np.sum(np.abs(full_fft) ** 2, axis=-1))
+        # maskB_slice_bool = np.take(maskB, slice_num, axis=readout_axis).astype(bool)
+
+        # if np.any(maskB_slice_bool) and slice_rsos.max() > slice_rsos.min():
+        #     head_slice_bool = slice_rsos > threshold_otsu(slice_rsos) # data-driven "is this voxel part of the head" mask
+        #     overlap_voxels = np.sum(head_slice_bool & maskB_slice_bool)
+        # else:
+        #     overlap_voxels = 0
+
+        # if overlap_voxels == 0:
+        #     eigenvec = np.eye(nc, dtype=A.dtype) # maskB doesn't overlap any real head tissue here -- nothing to deface
+        #     # clear the face mask here so downstream weighting/visualization reflects "no real face"
+        #     if readout_axis == 0:
+        #         maskB[slice_num, :, :] = 0
+        #     elif readout_axis == 1:
+        #         maskB[:, slice_num, :] = 0
+        #     elif readout_axis == 2:
+        #         maskB[:, :, slice_num] = 0
+        #====== test over ====================================
+    
         if not is_well_conditioned(B) and is_well_conditioned(A) : # if B is rank-deficient and A is not 
             eigenvec = rovir(nc, A, np.eye(nc, dtype=B.dtype)) # solve just Av = λv
 
@@ -469,6 +502,10 @@ def run_raw_deface(config='config.json'):
         else:
             eigenvec = rovir(nc, A, B) # finding the eigenvectors for (brain_covar)v = λ(face_covar)v
         
+        # if not is_well_conditioned(B) or not is_well_conditioned(A) : # if B is rank-deficient and A is not 
+        #     B = regularization(B)
+        # eigenvec = rovir(nc, A, B) 
+
         eigenvecs.append(eigenvec) # append eigenvec for current slice
     
         if "top_coils" not in inputs["coil_selection"]: # choose based on heuristics the number of eigenvectors to retain
@@ -489,18 +526,33 @@ def run_raw_deface(config='config.json'):
     print(GREEN + f'The top {top_eigenvec} eigenvectors will be retained.' + RESET)
 
     virtual_coil_data_all_slices = [] # to store the virtual coil data for each slice, a list of (ky, kz, ch) matrices
-  
+    virtual_coil_data_all_slices_unaligned = [] # to store the virtual coil data pre-alignment for debugging 
+
     weighted_mean_brain_retain = 0
     weighted_mean_face_retain = 0
 
     eigenvecs_aligned = [orth(eigenvecs[0][:, :top_eigenvec]).conj().T]
     # for each readout slice, compute the virtual coil information 
     for slice_num in range(data.shape[readout_axis]):
+        
+        # get current slice hybrid fft
+        if readout_axis == 0:
+            slice = hybrid_fft[slice_num, :, :, :] # get current slice, shape (ky, kz, ch)
+        elif readout_axis == 1: 
+            slice = hybrid_fft[:, slice_num, :, :] # get current slice, shape (ky, kz, ch)
+        elif readout_axis == 2:
+            slice = hybrid_fft[:, :, slice_num, :] # get current slice, shape (ky, kz, ch)
 
         eigenvec = eigenvecs[slice_num] # load the eigenvectors for the current slice
         
         eigenvec_retain = orth((eigenvec)[:,:top_eigenvec]) # retain only the top eigenvectors, orthonormalize to noise-whiten
         # eigenvec_retain is a NxM matrix
+            
+        # =========== for unaligned data =======================================
+        cur_virtual_coil_data_unaligned = form_virtual_coil_data((eigenvec)[:,:top_eigenvec], slice)
+        # cur_virtual_coil_data_unaligned = form_virtual_coil_data(eigenvec_retain, slice)
+        virtual_coil_data_all_slices_unaligned.append(cur_virtual_coil_data_unaligned)
+        # ======================================================================
 
         # perform phase alignment, assuming first slice is aligned
         if slice_num != 0: 
@@ -530,21 +582,61 @@ def run_raw_deface(config='config.json'):
         weighted_mean_face_retain += weight_face_cur * cur_face_retain
 
         # forming virtual coils, with eigenvectors as linear combo weights
-
-        if readout_axis == 0:
-            slice = hybrid_fft[slice_num, :, :, :] # get current slice, shape (ky, kz, ch)
-        elif readout_axis == 1: 
-            slice = hybrid_fft[:, slice_num, :, :] # get current slice, shape (ky, kz, ch)
-        elif readout_axis == 2:
-            slice = hybrid_fft[:, :, slice_num, :] # get current slice, shape (ky, kz, ch)
-            
         cur_virtual_coil_data = form_virtual_coil_data(eigenvec_retain, slice) # form virtual coils for this slice
-        virtual_coil_data_all_slices.append(cur_virtual_coil_data) 
-    
+        virtual_coil_data_all_slices.append(cur_virtual_coil_data)
+
+
+    # # ==================== DEBUG: ratio before readout-axis FFT recombination ====================
+    # # Reconstructs slices 64/65/66 in isolation (2D ifft over ky,kz only, same as test2.py)
+    # # using the ALREADY branching+phase-aligned virtual coil data, but WITHOUT ever doing the
+    # # final fft(..., axis=readout_axis) that recombines all x-slices together (line ~554 below).
+    # # Compare these printed stats / this plot directly against test2.py's output for slices 64-66.
+    # import matplotlib.pyplot as plt
+    # debug_slices = [s for s in [64, 65, 66] if s < data.shape[readout_axis]]
+    # debug_ratios = {}
+    # for s in debug_slices:
+    #     orig_hybrid_slice = hybrid_fft[s, :, :, :] # (ky, kz, ch)
+    #     orig_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(orig_hybrid_slice, axes=(0, 1)), axes=(0, 1), overwrite_x=True), axes=(0, 1))
+    #     orig_rsos = np.sqrt(np.sum(np.abs(orig_img) ** 2, axis=2))
+
+    #     defaced_hybrid_slice = virtual_coil_data_all_slices[s] # (ky, kz, nv), pre-FFT-along-readout_axis
+    #     defaced_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(defaced_hybrid_slice, axes=(0, 1)), axes=(0, 1), overwrite_x=True), axes=(0, 1))
+    #     defaced_rsos = np.sqrt(np.sum(np.abs(defaced_img) ** 2, axis=2))
+
+    #     ratio_pre_fft = defaced_rsos / orig_rsos
+    #     debug_ratios[s] = ratio_pre_fft
+    #     print(GREEN + f"[pre-FFT ratio] slice {s}: min={np.nanmin(ratio_pre_fft):.4f} "
+    #                    f"mean={np.nanmean(ratio_pre_fft):.4f} max={np.nanmax(ratio_pre_fft):.4f}" + RESET)
+
+    # if debug_slices:
+    #     fig, axes = plt.subplots(1, len(debug_slices), figsize=(5 * len(debug_slices), 5))
+    #     if len(debug_slices) == 1:
+    #         axes = [axes]
+    #     im = None
+    #     for ax, s in zip(axes, debug_slices):
+    #         im = ax.imshow(np.rot90(debug_ratios[s]), cmap='RdYlGn', vmin=0, vmax=2)
+    #         ax.set_title(f'slice {s} (pre-readout-FFT ratio)')
+    #         ax.axis('off')
+    #     fig.colorbar(im, ax=axes, orientation='vertical', fraction=0.02)
+    #     plt.suptitle('Ratio maps BEFORE readout-axis FFT recombination')
+    #     plt.show()
+    # # ==================== END DEBUG ====================
+
+
+    # ======== display virtual coils for unaligned stuff ============
+
+    virtual_hybrid_unaligned = np.stack(virtual_coil_data_all_slices_unaligned, axis=readout_axis) # stack along the x axis to form (x, ky, kz, nv)
+    del virtual_coil_data_all_slices_unaligned
+    virtual_coil_data_unaligned = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_hybrid_unaligned, axes = (0,1)), axes=(0,1), overwrite_x=True), axes = (0,1))
+    display_virtual_coils(virtual_coil_data_unaligned, 60, 'Virtual Coils Before Alignment',axis=0) # sagittal view
+    display_virtual_coils(virtual_coil_data_unaligned, 60, 'Virtual Coils Before Alignment', axis=2) # axial view, matches readout_axis
+
+    # ===============================================================
     print(GREEN + f'Mean Brain Signal Retention: {weighted_mean_brain_retain}')
     print(f'Mean Face Signal Retention: {weighted_mean_face_retain}' + RESET)
 
     virtual_hybrid = np.stack(virtual_coil_data_all_slices, axis=readout_axis) # stack along the x axis to form (x, ky, kz, nv)
+    
     del virtual_coil_data_all_slices
     
     # np.save(f'results/phase_align_test_t2_01.npy', virtual_hybrid)
@@ -568,7 +660,14 @@ def run_raw_deface(config='config.json'):
 
     if inputs["visualization"]["plt_on"]:
         display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, weighted_mean_brain_retain, weighted_mean_face_retain) # display images
-    
+
+    # if inputs["visualization"]["show_virtual_coils"]:
+    #     display_virtual_coils(virtual_coil_data, x_slice, 'Virtual Coils After Alignment', axis=0) # sagittal view
+
+    virtual_coils_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_hybrid, axes = (0,1)), axes=(0, 1), overwrite_x=True), axes = (0, 1))
+    display_virtual_coils(virtual_coils_img, 60, 'Virtual Coils After Alignment', axis=0) # sagittal view
+    display_virtual_coils(virtual_coils_img, 60, 'Virtual Coils After Alignment', axis=2) # sagittal view
+
     # save nifti of results for visualization in 3DSlicer
     if inputs["output"]["save_defaced_image"] == True:
         niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'results/defaced_{dataID}_n={top_eigenvec}_brain={weighted_mean_brain_retain:.2}_face={weighted_mean_face_retain:.2}')
@@ -607,7 +706,50 @@ def quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, mask_sch
     new_log.to_csv('output_log.txt', mode='a', header= not os.path.exists('output_log.txt'), sep='\t')
 
 
-if __name__ == "__main__": 
+def display_virtual_coils(virtual_coil_data, slice_index, name, axis=0):
+    '''
+    Visualizes each individual virtual coil's reconstructed image at a single slice
+    along the given spatial axis.
+
+    Parameters
+    ----------
+        virtual_coil_data -> np.ndarray: the defaced k-space data with virtual coils, shape (x, y, z, nv)
+        slice_index -> int: the slice index along `axis` to visualize
+        axis -> int: which spatial axis to slice along (0 = x/sagittal, 1 = y/coronal, 2 = z/axial)
+    '''
+    import matplotlib.pyplot as plt
+
+    view_names = {0: 'sagittal x', 1: 'coronal y', 2: 'axial z'}
+
+    nv = virtual_coil_data.shape[3]
+    (nrow, ncol) = closest_factors(nv)
+
+
+    vmin = 0
+    vmax = np.percentile(np.abs(np.concatenate([
+        virtual_coil_data.ravel()
+    ])), 99.5)
+
+
+    plt.figure()
+    plt.suptitle(f'{name} ({view_names[axis]} slice: {slice_index})')
+    for coil in range(nv):
+        # reconstruct one channel at a time and keep only the slice of interest, to avoid
+        # holding every channel's full 3D image in memory at once
+
+        plt.subplot(nrow, ncol, coil + 1)
+        plt.axis('off')
+        plt.text(0, 0, f'{coil}', color='red')
+
+        if axis == 0 : 
+            plt.imshow(np.rot90(np.abs(virtual_coil_data[slice_index,:,:,coil])), cmap='gray', vmin=vmin, vmax=vmax)
+        elif axis == 2:
+            plt.imshow(np.rot90(np.abs(virtual_coil_data[:,:,slice_index,coil])), cmap='gray', vmin=vmin, vmax=vmax)
+
+    plt.show()
+
+
+if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
