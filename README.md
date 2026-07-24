@@ -74,7 +74,9 @@ The format of the k-space data will be manipulated to have the shape (x, y, z, c
 | x_y_z_channel     | list          | see explanation below *                   | 
 | a11               | float         | x-axis image voxel resolution (millimeters)| 
 | a22               | float         | y-axis image voxel resolution (millimeters)| 
-| a33               | float         | z-axis image voxel resolution (millimeters)| 
+| a33               | float         | z-axis image voxel resolution (millimeters)|
+| modality          | string        | "t1" or "t2" image modalities are accepted| 
+| readout_axis      | int           | readout axis for slice-b-slice defacing (x = 0, y = 1, z = 2)|  
 | x_slice           | int           | slice number for sagittal view            | 
 | y_slice           | int           | slice number for coronal view             |
 | z_slice           | int           | slice number for axial view               |
@@ -88,7 +90,7 @@ The format of the k-space data will be manipulated to have the shape (x, y, z, c
 | brain_mask        | string        | optional predfined brain mask provided by user                  |
 | manipulation      | string        | specify manipulation scheme for segmentation results * | 
 | gap               | int           | size of gap between face and brain mask * | 
-| save_defaced_kspace | boolean     | option to save defaced k-space data to resulsts folder as a numpy array| 
+| save_defaced_kspace | boolean     | option to save defaced k-space data to results folder as a numpy array| 
 | save_defaced_image  | boolean     | option to save defaced k-space data to results folder as a NIfTI file | 
 
 If `top_coils` is not specified, then the selected `threshold_method` and the corresponding `threshold_value` will be used as a heuristic for determining the top virtual coils to form the defaced data. Additionally, the user can optionally provide their own `face_mask` and `brain_mask`. If these are not specified, then the segmentation tool implemented in this pipeline will compute a face and brain mask. The user can also optionally provide the `data_path`, `data_id`, channel, and affine elements of a reference dataset to generate the face and brain masks, which will be applied on the target dataset for defacing. Simply add the following lines to the config.json file:
