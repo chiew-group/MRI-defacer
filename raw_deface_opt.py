@@ -327,8 +327,8 @@ def make_A_B(image, nc, maskA, maskB):
 
     '''
 
-    A = np.zeros((nc, nc), dtype=np.complex128) # array to store A covariance matrix
-    B = np.zeros((nc, nc), dtype=np.complex128) # array to store B covariance matrix
+    A = np.zeros((nc, nc), dtype=np.complex64) # array to store A covariance matrix
+    B = np.zeros((nc, nc), dtype=np.complex64) # array to store B covariance matrix
 
     for z_slice in range(image.shape[2]): # calculate covariance matrices slice by slice
         cur_slice = image[:, :, z_slice, :] # get current z slice
@@ -349,7 +349,7 @@ def compute_image(data):
     # to bypass saving new array with all channel dimensions
     # for optimizing calculations for memory
 
-    rsos_image = np.zeros(data.shape[:3]) # make empty array to store rsos image
+    rsos_image = np.zeros(data.shape[:3], dtype=np.float32) # make empty array to store rsos image
     for ch in range(data.shape[3]):
         # compute fft for current channel
         ch_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(data[:, :, :, ch], axes = (0, 1, 2)), axes=(0, 1, 2)), axes = (0, 1, 2))
@@ -508,6 +508,10 @@ def run_raw_deface(config='config.json'):
         maskA = brain_mask
         maskB = face_mask
 
+    # convert to float32 so that in make_A_B multiplying by complex64 doesn't upcast to complex128
+    maskA = maskA.astype(np.float32)
+    maskB = maskB.astype(np.float32)
+
     print(GREEN + "Masks have been prepared" + RESET)
 
     nc = ref_data.shape[-1] if "reference_data" in inputs else data.shape[-1] # get total number of original coils
@@ -540,7 +544,58 @@ def run_raw_deface(config='config.json'):
 
     print(f'The top nv eigenvectors contain the first {top_eigenvec} eigenvectors')
     eigenvec_retain = eigenvec[:,:top_eigenvec] # retain only the top eigenvectors 
+    
+    #============ DEBUG: DISPLAY VIRTUAL COILS BEFORE ORTH ======================
+    # from visualization import closest_factors
+    # import matplotlib.pyplot as plt
+
+    # vcoil = form_virtual_coil_data(eigenvec, data)
+    # vcoil_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(vcoil, axes = (0, 1, 2)), axes=(0, 1, 2), overwrite_x=True), axes = (0, 1, 2))
+    # vmin = 0
+    # vmax = np.percentile(np.abs(np.concatenate( vcoil_img)), 99.5)
+
+    # slice = 60
+
+    # # display each virtual coil's data
+    # (nr, nc) = closest_factors(vcoil_img.shape[3])
+    # plt.suptitle(f'x slice: {slice}')
+    # for coil in range(vcoil_img.shape[3]):
+    #     plt.axis('off')
+    #     plt.subplot(nr,nc, coil+1)
+    #     plt.text(0, 0, f'{coil}', color='red')
+    #     plt.imshow(np.abs(np.rot90(vcoil_img[slice, :, :, coil])), cmap='gray', vmin=vmin, vmax=vmax)
+    # plt.show()
+
+    # exit()
+    #============================================================================
+
     eigenvec_retain = orth(eigenvec_retain) # orthonormalize retained eigenvectors to noise-whiten
+
+    #============ DEBUG: DISPLAY VIRTUAL COILS AFTER ORTH ======================
+    from visualization import closest_factors
+    import matplotlib.pyplot as plt
+    
+    vcoil_retain = form_virtual_coil_data(eigenvec_retain, data)
+    vcoil_retain_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(vcoil_retain, axes = (0, 1, 2)), axes=(0, 1, 2), overwrite_x=True), axes = (0, 1, 2))
+    vmin = 0
+    vmax = np.percentile(np.abs(np.concatenate(vcoil_retain_img)), 99.5)
+
+    slice = 60
+
+    # display each virtual coil's data
+    (nr, nc) = closest_factors(vcoil_retain_img.shape[3])
+    plt.suptitle(f'x slice: {slice}')
+    for coil in range(vcoil_retain_img.shape[3]):
+        plt.axis('off')
+        plt.subplot(nr,nc, coil+1)
+        plt.text(0, 0, f'{coil}', color='red')
+        plt.imshow(np.abs(np.rot90(vcoil_retain_img[slice, :, :, coil])), cmap='gray', vmin=vmin, vmax=vmax)
+    plt.show()
+
+    exit()
+
+    exit()
+    #============================================================================
 
     orth_proj = eigenvec_retain @ eigenvec_retain.conj().T # find orthogonal projection matrix for span of retained eigenvectors
    
