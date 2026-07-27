@@ -228,7 +228,7 @@ def set_masks(ROI, interference, option, gap=10):
         maskB = np.zeros_like(maskA)
         complement_A = (~binary_dilation(maskA, iterations=gap)).astype(np.uint8)
         y_bound = int(maskB.shape[1]*0.95)
-        z_bound = int(maskB.shape[2]*0.5)
+        z_bound = int(maskB.shape[2]*0.55)
         maskB[:, y_bound:, :z_bound] = complement_A[:, y_bound:, :z_bound]
 
     return maskA, maskB
@@ -502,10 +502,8 @@ def run_raw_deface(config='config.json'):
     from collections import Counter
 
     if "top_coils" in inputs["coil_selection"]: # if user specifies the number of top virtual coils to keep, use that 
-            top_eigenvec = inputs["coil_selection"]["top_coils"]
+        top_eigenvec = inputs["coil_selection"]["top_coils"]
     else: # if using the automated version, decide on unified number of top eigenvecs to retain
-        # counter = Counter(num_top_eigenvecs)
-        # top_eigenvec = counter.most_common(1)[0][0] # use the most commen recommendation 
         top_eigenvec = max(num_top_eigenvecs)
 
     print(GREEN + f'[UPDATE] The top {top_eigenvec} eigenvectors will be retained.' + RESET)
@@ -570,12 +568,12 @@ def run_raw_deface(config='config.json'):
         cur_virtual_coil_data = form_virtual_coil_data(eigenvec_retain, slice) # form virtual coils for this slice
         virtual_coil_data_all_slices.append(cur_virtual_coil_data)
 
-
     # ======== display virtual coils for unaligned stuff ============
 
     virtual_hybrid_unaligned = np.stack(virtual_coil_data_all_slices_unaligned, axis=readout_axis) # stack along the x axis to form (x, ky, kz, nv)
     del virtual_coil_data_all_slices_unaligned
-    virtual_coil_data_unaligned = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_hybrid_unaligned, axes = (0,1)), axes=(0,1), overwrite_x=True), axes = (0,1))
+    remaining_axes = tuple(ax for ax in (0, 1, 2) if ax != readout_axis) # the two axes still in k-space after the 1D readout ifft
+    virtual_coil_data_unaligned = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_hybrid_unaligned, axes = remaining_axes), axes=remaining_axes, overwrite_x=True), axes = remaining_axes)
     display_virtual_coils(virtual_coil_data_unaligned, 60, 'Virtual Coils Before Alignment',axis=0) # sagittal view
     display_virtual_coils(virtual_coil_data_unaligned, 60, 'Virtual Coils Before Alignment', axis=2) # axial view, matches readout_axis
 
@@ -588,9 +586,11 @@ def run_raw_deface(config='config.json'):
     del virtual_coil_data_all_slices
 
     # save virtual hybrid data after phase alignment to check
-    np.save(f'results/phase_align_test_{dataID}.npy', virtual_hybrid)
-    print(f'Phase alignment test data saved.')
-    exit()
+    np.save(f'results/unaligned_{dataID}_readout{readout_axis}.npy', virtual_hybrid_unaligned)
+    print(f'Unaligned virtual coil data saved to results/unaligned_{dataID}_readout{readout_axis}.npy')
+    np.save(f'results/aligned_{dataID}_readout{readout_axis}.npy', virtual_hybrid)
+    print(f'Aligned virtual coil data saved to results/aligned_{dataID}_readout{readout_axis}.npy')
+    # exit()
 
     # fft along the readout axis to obtain fully spatial frequency defaced data
     virtual_coil_data = sp.fft.fftshift(sp.fft.fft(sp.fft.fftshift(virtual_hybrid, axes = (readout_axis)), axis=readout_axis, overwrite_x=True), axes = (readout_axis))
@@ -598,7 +598,7 @@ def run_raw_deface(config='config.json'):
     # save final defaced raw data
     if inputs["output"]["save_defaced_kspace"] == True:
         np.save(f'results/defaced_{dataID}.npy', virtual_coil_data)
-        
+    
     ####################################################################
     # FOLLOWING CODE IS FOR VISUALIZATION OF FINAL RESULT
 
@@ -608,7 +608,8 @@ def run_raw_deface(config='config.json'):
     if inputs["visualization"]["plt_on"]:
         display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, weighted_mean_brain_retain, weighted_mean_face_retain) # display images
 
-    virtual_coils_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_hybrid, axes = (0,1)), axes=(0, 1), overwrite_x=True), axes = (0, 1))
+    non_readout_axes = tuple(ax for ax in (0, 1, 2) if ax != readout_axis) 
+    virtual_coils_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_hybrid, axes = non_readout_axes), axes=non_readout_axes, overwrite_x=True), axes = non_readout_axes)
     display_virtual_coils(virtual_coils_img, 60, 'Virtual Coils After Alignment', axis=0) # sagittal view
     display_virtual_coils(virtual_coils_img, 60, 'Virtual Coils After Alignment', axis=2) # sagittal view
 
