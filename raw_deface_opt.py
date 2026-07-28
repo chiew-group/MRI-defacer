@@ -675,7 +675,7 @@ def display_virtual_coils(virtual_coil_data, slice_index, name, axis=0):
         virtual_coil_data.ravel()
     ])), 99.5)
 
-
+    plt.rcParams['savefig.dpi']=600
     plt.figure()
     plt.suptitle(f'{name} ({view_names[axis]} slice: {slice_index})')
     for coil in range(nv):
