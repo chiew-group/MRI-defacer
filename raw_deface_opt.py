@@ -499,8 +499,6 @@ def run_raw_deface(config='config.json'):
 
     np.save(f'results/{dataID}_eigenvecs.npy', eigenvecs)
 
-    from collections import Counter
-
     if "top_coils" in inputs["coil_selection"]: # if user specifies the number of top virtual coils to keep, use that 
         top_eigenvec = inputs["coil_selection"]["top_coils"]
     else: # if using the automated version, decide on unified number of top eigenvecs to retain
