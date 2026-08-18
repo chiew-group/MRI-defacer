@@ -5,6 +5,8 @@ from scipy.linalg import norm
 import matplotlib
 import matplotlib.pyplot as plt
 import kneed
+import scipy as sp
+from visualization import plot_metrics
 
 from IPython import get_ipython
 
@@ -15,7 +17,9 @@ else:
     matplotlib.use('Qt5Agg')         
 
 
+# colours for print statements
 RED = '\033[91m'
+GREEN = '\033[92m'
 RESET = '\033[0m'
 
 def rovir(nc, brain_covar, face_covar):
@@ -75,7 +79,8 @@ def elbow_finder(nc, metric, sensitivity, curve_type, curve_direction):
     print(kneedle.elbow, metric[int(kneedle.elbow)])
     return kneedle.elbow
 
-def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, slice, plt_on=False):
+
+def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, mode, plt_on=False, plot_slices=None, cur_slice=None):
     '''
     Selects the top eigenvectors based on SIR, coil signal energy, coil interference energy, 
     ROI signal retention, or interference signal retention. 
@@ -145,46 +150,13 @@ def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, slice, plt_
 
     xaxis = np.arange(1, nc+1)
 
-    if plt_on and (slice == 64 or slice == 65 or slice == 66):
+    if plt_on and mode == 'global':
+        plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain, face_retain, '- Global ROVir')
 
-        plt.figure(figsize=(16, 10), dpi=120)
-
-        # visualize metrics as scatterplots
-        plt.subplot(2,2,1)
-        plt.scatter(xaxis, sirs, c = "blue")
-        plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
-        plt.title("SIR of Each Virtual Coil")
-        plt.xlabel("jth Coil")
-        plt.legend()
-        plt.autoscale(enable=True, axis='both', tight=True)
-
-        plt.subplot(2,2,2)
-        plt.scatter(xaxis, brain_signal, c = "green")
-        plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
-        plt.title("Signal Energy of Each Virtual Coil")
-        plt.xlabel("jth Coil")
-        plt.legend()
-        plt.autoscale(enable=True, axis='both', tight=True)
-
-        plt.subplot(2,2,3)
-        plt.scatter(xaxis, face_signal, c = "red")
-        plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
-        plt.title("Interference Energy of Each Virtual Coil")
-        plt.xlabel("jth Coil")
-        plt.legend()
-        plt.autoscale(enable=True, axis='both', tight=True)
-        
-        plt.subplot(2,2,4)
-        plt.scatter(np.arange(1, nc+1), np.array(brain_retain), label = "Brain Retained", c= "green")
-        plt.scatter(np.arange(1, nc+1), np.array(face_retain), label = "Face Retained", c= "red")
-        plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
-        plt.ylabel("Percentage Retained (%)")
-        plt.xlabel("Total Channels Retained (N)")
-        plt.legend()
-        plt.title("Brain/Face Signal Retention vs Virtual Coils Retained")
-        plt.autoscale(enable=True, axis='both', tight=True)
-        plt.tight_layout(pad=3)
-        plt.show()
+    if plt_on and mode == 'slice_by_slice' and plot_slices:
+        for plot_slice in plot_slices:
+            if cur_slice == plot_slice: 
+                plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain, face_retain, f'(slice {cur_slice})')
 
     return coil + 1 # plus 1 because slicing is not inclusive, i.e if eigenvec[:,:coil], coil is not included
 
@@ -215,4 +187,80 @@ def form_virtual_coil_data(top_eigenvec, data):
     # lin combo of original coil data with lin combo weights as coef
     # (x, y, ch, z) * (ch, nv) = (x, y, z, nv)
     return new_data
+
+def make_A_B(image, nc, maskA, maskB):
+    '''
+    To compute the covariance matrices A and B that correspond to the brain and face regions, respectively.
+
+    Parameters
+    ----------
+        image -> np.ndarray: the reconstructed image with shape (x, y, z, ch)
+        nc -> int: the number of original coils 
+        maskA -> np.ndarray: a 3D array of the brain region
+        maskB -> np.ndarray: a 3D array of the face region
+
+    Returns
+    ----------
+        A -> np.ndarray: the 2D covariance matrix corresponding to the brain, shape (nc, nc)
+        B -> np.ndarray: the 2D covariance matrix corresponding to the face, shape (nc, nc)
+
+    '''
+
+    A = np.zeros((nc, nc), dtype=np.complex64) # array to store A covariance matrix
+    B = np.zeros((nc, nc), dtype=np.complex64) # array to store B covariance matrix
+
+    for z_slice in range(image.shape[2]): # calculate covariance matrices slice by slice
+        cur_slice = image[:, :, z_slice, :] # get current z slice
+        maskA_slice = maskA[:, :, z_slice] # get current maskA (brain) for z slice
+        maskB_slice = maskB[:, :, z_slice] # get current maskB (face) for z slice
+
+        maskedA_slice = cur_slice * maskA_slice[:, :, None] # apply brain mask to z slice of image  
+        maskedB_slice = cur_slice * maskB_slice[:, :, None] # apply face mask to z slice of image
+
+        # dot product over x and y axes, then sum over z axis to find covariance
+        A += np.tensordot(np.conj(maskedA_slice), maskedA_slice, axes=([0,1],[0,1]))
+        B += np.tensordot(np.conj(maskedB_slice), maskedB_slice, axes=([0,1],[0,1]))
+
+    return (A, B)
+
+def global_rovir(inputs, nc, data, dataID, method, threshold, maskA, maskB, ref_data=None):
+
+    if "reference_data" in inputs: # compute the image using refernce data
+        og_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(ref_data, axes = (0,1,2)), axes=(0,1,2), overwrite_x=True), axes = (0,1,2)) # get image, shape (x, y, z, ch)
+    else: # compute the image using target data
+        og_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(data, axes = (0,1,2)), axes=(0,1,2), overwrite_x=True), axes = (0,1,2)) # get image, shape (x, y, z, ch)
+
+    brain_covar, face_covar = make_A_B(og_image, nc, maskA, maskB)
+
+    eigenvec = rovir(nc, brain_covar, face_covar)
+
+    if "top_coils" not in inputs["coil_selection"]: # choose based on heuristics the number of eigenvectors to retain
+        top_eigenvec = top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, 'global', inputs["visualization"]["plt_on"])
+    
+    else: # if user specifies the number of top virtual coils to keep, use that 
+        top_eigenvec = inputs["coil_selection"]["top_coils"]
+
+    print(f'The top nv eigenvectors contain the first {top_eigenvec} eigenvectors')
+    eigenvec_retain = eigenvec[:,:top_eigenvec] # retain only the top eigenvectors 
+    eigenvec_retain = orth(eigenvec_retain)
+
+    orth_proj = eigenvec_retain @ eigenvec_retain.conj().T # find orthogonal projection matrix for span of retained eigenvectors
+   
+    # calculate signal retained from maskA region
+    brain_retain = (norm((orth_proj @ brain_covar @ orth_proj), ord = 'fro') / norm (brain_covar, ord = 'fro'))*100
+    print(GREEN + f'BRAIN SIGNAL RETAINED:{brain_retain}')
+
+    # calculate signal retained from maskB region
+    face_retain = (norm((orth_proj @ face_covar @ orth_proj), ord = 'fro') / norm (face_covar, ord = 'fro'))*100
+    print(f'FACE SIGNAL RETAINED:{face_retain}' + RESET)
+
+    # forming virtual coils, with eigenvectors as linear combo weights
+    virtual_coil_data = form_virtual_coil_data(eigenvec_retain, data) 
+    print(GREEN + f'Virtual coils successfully formed' + RESET)
+
+    # save final defaced raw data
+    if inputs["output"]["save_defaced_kspace"] == True:
+        np.save(f'results/defaced_{dataID}.npy', virtual_coil_data)
+
+    return virtual_coil_data, top_eigenvec, brain_retain, face_retain
 
