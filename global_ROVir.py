@@ -3,7 +3,6 @@ from scipy.linalg import orth
 from scipy.linalg import eigh
 from scipy.linalg import norm
 import matplotlib
-import matplotlib.pyplot as plt
 import kneed
 import scipy as sp
 from visualization import plot_metrics, compare_retention, display_virtual_coils
@@ -15,7 +14,6 @@ if 'ipykernel' in str(get_ipython()):
 
 else:
     matplotlib.use('Qt5Agg')         
-
 
 # colours for print statements
 RED = '\033[91m'

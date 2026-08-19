@@ -5,9 +5,6 @@ import nibabel as nib
 import numpy as np 
 import scipy as sp
 
-from scipy.linalg import orth
-from scipy.linalg import norm
-
 from skimage.morphology import convex_hull_image
 from skimage.filters import apply_hysteresis_threshold
 from skimage.morphology import binary_erosion 
@@ -22,11 +19,8 @@ import pandas as pd
 from slice_by_slice_ROVir import slice_by_slice_rovir
 
 from visualization import display_defaced
-from visualization import compare_retention
-from visualization import display_virtual_coils
 
 from to_nifti import niftify
-
 from automask import gen_mask
 
 # colours for print statements

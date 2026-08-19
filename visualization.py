@@ -6,7 +6,7 @@ import numpy as np
 from scipy.linalg import orth
 from scipy.linalg import norm
 
-from ROVir import form_virtual_coil_data
+from global_ROVir import form_virtual_coil_data
 
 from IPython import get_ipython
 
@@ -16,8 +16,55 @@ if 'ipykernel' in str(get_ipython()):
 else:
     matplotlib.use('Qt5Agg')         
 
+def plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain, face_retain, show_metric_graphs, save_metric_graphs, title =''):
+
+    plt.figure(figsize=(16, 10), dpi=120)
+
+    # visualize metrics as scatterplots
+    plt.subplot(2,2,1)
+    plt.scatter(xaxis, sirs, c = "blue")
+    plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
+    plt.title(f"SIR of Each Virtual Coil {title}")
+    plt.xlabel("jth Coil")
+    plt.legend()
+    plt.autoscale(enable=True, axis='both', tight=True)
+
+    plt.subplot(2,2,2)
+    plt.scatter(xaxis, brain_signal, c = "green")
+    plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
+    plt.title(f"Signal Energy of Each Virtual Coil {title}")
+    plt.xlabel("jth Coil")
+    plt.legend()
+    plt.autoscale(enable=True, axis='both', tight=True)
+
+    plt.subplot(2,2,3)
+    plt.scatter(xaxis, face_signal, c = "red")
+    plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
+    plt.title(f"Interference Energy of Each Virtual Coil {title}")
+    plt.xlabel("jth Coil")
+    plt.legend()
+    plt.autoscale(enable=True, axis='both', tight=True)
+    
+    plt.subplot(2,2,4)
+    plt.scatter(np.arange(1, nc+1), np.array(brain_retain), label = "Brain Retained", c= "green")
+    plt.scatter(np.arange(1, nc+1), np.array(face_retain), label = "Face Retained", c= "red")
+    plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
+    plt.ylabel("Percentage Retained (%)")
+    plt.xlabel("Total Channels Retained (N)")
+    plt.legend()
+    plt.title(f"Brain/Face Signal Retention vs Virtual Coils Retained {title}")
+    plt.autoscale(enable=True, axis='both', tight=True)
+    plt.tight_layout(pad=3)
+
+    if save_metric_graphs:
+        plt.savefig(F'results/blah.png') # CHANGE THIS LATER
+
+    if show_metric_graphs:
+        plt.show()
+
+
 def display_defaced(og_image_rsos, defaced_image_rsos, x_slice, y_slice, z_slice, 
-            maskA, maskB, brain_retain, face_retain):
+            maskA, maskB, show_summary, save_summary):
     '''
     Visualize the x_slice, y_slice, and z_slice slices of the
     original image, defaced image, and masks overlayed. 
@@ -116,33 +163,35 @@ def display_defaced(og_image_rsos, defaced_image_rsos, x_slice, y_slice, z_slice
     ratio_colourbar = plt.colorbar(ratio_sag, cax=ratio_colourbar_ax, orientation='vertical')
     ratio_colourbar.set_label('Retention Ratio', fontsize=10)
 
-    plt.show()
-
-    x_slices = og_image_rsos.shape[0]
-    (nrow, ncol) = closest_factors(x_slices)
-    for x_slice in range(0, x_slices):
+    # x_slices = og_image_rsos.shape[0]
+    # (nrow, ncol) = closest_factors(x_slices)
+    # for x_slice in range(0, x_slices):
    
-        plt.subplot(nrow,ncol,x_slice+1)
-        plt.axis('off')
-        plt.text(0, 0, f'{x_slice}', fontsize=6, color='black')
-        plt.imshow(np.rot90(ratio[x_slice, :, :]), cmap='RdYlGn', vmin=global_vmin, vmax=global_vmax)   
-    plt.show()
+    #     plt.subplot(nrow,ncol,x_slice+1)
+    #     plt.axis('off')
+    #     plt.text(0, 0, f'{x_slice}', fontsize=6, color='black')
+    #     plt.imshow(np.rot90(ratio[x_slice, :, :]), cmap='RdYlGn', vmin=global_vmin, vmax=global_vmax)   
+    # plt.show()
 
-    x_slices = og_image_rsos.shape[0]
-    (nrow, ncol) = closest_factors(x_slices)
-    for x_slice in range(0, x_slices):
+    # x_slices = og_image_rsos.shape[0]
+    # (nrow, ncol) = closest_factors(x_slices)
+    # for x_slice in range(0, x_slices):
    
-        plt.subplot(nrow,ncol,x_slice+1)
-        plt.axis('off')
-        plt.text(0, 0, f'{x_slice}', fontsize=6, color='black')
-        plt.imshow(np.rot90(defaced_image_rsos[x_slice, :, :]), cmap='gray')   
-        plt.imshow(np.rot90(maskB[x_slice, :, :]), alpha = 0.3, cmap = 'Reds')
-        plt.imshow(np.rot90(maskA[x_slice, :, :]), alpha = 0.3, cmap = 'Greens')
-    plt.show()
+    #     plt.subplot(nrow,ncol,x_slice+1)
+    #     plt.axis('off')
+    #     plt.text(0, 0, f'{x_slice}', fontsize=6, color='black')
+    #     plt.imshow(np.rot90(defaced_image_rsos[x_slice, :, :]), cmap='gray')   
+    #     plt.imshow(np.rot90(maskB[x_slice, :, :]), alpha = 0.3, cmap = 'Reds')
+    #     plt.imshow(np.rot90(maskA[x_slice, :, :]), alpha = 0.3, cmap = 'Greens')
 
-    
+    if save_summary:
+        plt.savefig(f'results/hello.png') #CHANGE THIS NAMING CONVENTION
 
-def compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice):
+    if show_summary:
+        plt.show()
+
+
+def compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice, show_compare_retention, save_compare_retention):
     '''
     Visualizes the image retaining 1, 2, 3, ..., nc virtual coils to
     compare the defacing results depending on the number of top
@@ -181,11 +230,14 @@ def compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice):
         plt.text(image_rsos[x_slice, :, :].shape[0]-5, image_rsos[x_slice, :, :].shape[1], f'{i}', color="white", fontsize=15, ha='right', va='bottom')
         # plt.imshow(np.rot90(image_rss[x_slice, :, :]), cmap = 'gray', vmin = 0 , vmax = 0.0000008) # changed windowing for the 48ch dataset
         plt.imshow(np.rot90(image_rsos[x_slice, :, :]), cmap = 'gray', vmin = 0 , vmax = 800000000000)
-    plt.show()
+
+    if save_compare_retention:
+        plt.savefig(f'results/fdsal.png') # CHANGE THIS LATER
+    if show_compare_retention:
+        plt.show()
 
 def closest_factors(n):
     return next((i, n // i) for i in range(int(np.sqrt(n)), 0, -1) if n % i == 0)
-
 
 def show_virtual_coils(data, eigenvec, x_slice):
     '''
@@ -211,3 +263,50 @@ def show_virtual_coils(data, eigenvec, x_slice):
         plt.axis('off')
         # plt.title(f'Virtual Coil {coil+1}')
     plt.show()
+
+
+
+def display_virtual_coils(virtual_coil_data, slice_index, name, show_virtual_coil_images, save_virtual_coil_images, axis=0):
+    '''
+    Visualizes each individual virtual coil's reconstructed image at a single slice
+    along the given spatial axis.
+
+    Parameters
+    ----------
+        virtual_coil_data -> np.ndarray: the defaced k-space data with virtual coils, shape (x, y, z, nv)
+        slice_index -> int: the slice index along `axis` to visualize
+        axis -> int: which spatial axis to slice along (0 = x/sagittal, 1 = y/coronal, 2 = z/axial)
+    '''
+    import matplotlib.pyplot as plt
+
+    view_names = {0: 'sagittal x', 1: 'coronal y', 2: 'axial z'}
+
+    nv = virtual_coil_data.shape[3]
+    (nrow, ncol) = closest_factors(nv)
+
+
+    vmin = 0
+    vmax = np.percentile(np.abs(np.concatenate([
+        virtual_coil_data.ravel()
+    ])), 99.5)
+
+    plt.rcParams['savefig.dpi']=600
+    plt.figure()
+    plt.suptitle(f'{name} ({view_names[axis]} slice: {slice_index})')
+    for coil in range(nv):
+        # reconstruct one channel at a time and keep only the slice of interest, to avoid
+        # holding every channel's full 3D image in memory at once
+
+        plt.subplot(nrow, ncol, coil + 1)
+        plt.axis('off')
+        plt.text(0, 0, f'{coil}', color='red')
+
+        if axis == 0 : 
+            plt.imshow(np.rot90(np.abs(virtual_coil_data[slice_index,:,:,coil])), cmap='gray', vmin=vmin, vmax=vmax)
+        elif axis == 2:
+            plt.imshow(np.rot90(np.abs(virtual_coil_data[:,:,slice_index,coil])), cmap='gray', vmin=vmin, vmax=vmax)
+
+    if save_virtual_coil_images:
+        plt.savefig('results/CHAGNRE.png')# CHANGE THIS LATER
+    if show_virtual_coil_images:
+        plt.show()
