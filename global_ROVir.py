@@ -6,7 +6,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import kneed
 import scipy as sp
-from visualization import plot_metrics
+from visualization import plot_metrics, compare_retention, display_virtual_coils
 
 from IPython import get_ipython
 
@@ -80,7 +80,7 @@ def elbow_finder(nc, metric, sensitivity, curve_type, curve_direction):
     return kneedle.elbow
 
 
-def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, mode, plt_on=False, plot_slices=None, cur_slice=None):
+def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, mode, compute_metric_graphs, show_metric_graphs, save_metric_graphs, plot_slices=None, cur_slice=None):
     '''
     Selects the top eigenvectors based on SIR, coil signal energy, coil interference energy, 
     ROI signal retention, or interference signal retention. 
@@ -150,13 +150,13 @@ def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, mode, plt_o
 
     xaxis = np.arange(1, nc+1)
 
-    if plt_on and mode == 'global':
-        plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain, face_retain, '- Global ROVir')
+    if compute_metric_graphs and mode == 'global':
+        plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain, face_retain, show_metric_graphs, save_metric_graphs, '- Global ROVir')
 
-    if plt_on and mode == 'slice_by_slice' and plot_slices:
+    if compute_metric_graphs and mode == 'slice_by_slice' and plot_slices:
         for plot_slice in plot_slices:
             if cur_slice == plot_slice: 
-                plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain, face_retain, f'(slice {cur_slice})')
+                plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain, face_retain, show_metric_graphs, save_metric_graphs, f'(slice {cur_slice})')
 
     return coil + 1 # plus 1 because slicing is not inclusive, i.e if eigenvec[:,:coil], coil is not included
 
@@ -223,7 +223,11 @@ def make_A_B(image, nc, maskA, maskB):
 
     return (A, B)
 
-def global_rovir(inputs, nc, data, dataID, method, threshold, maskA, maskB, ref_data=None):
+def global_rovir(inputs, nc, data, dataID, method, threshold, maskA, maskB, 
+                compute_metric_graphs, show_metric_graphs, save_metric_graphs, 
+                compute_compare_retention, show_compare_retention, save_compare_retention,
+                compute_virtual_coil_images, show_virtual_coil_images, save_virtual_coil_images,
+                ref_data=None):
 
     if "reference_data" in inputs: # compute the image using refernce data
         og_image = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(ref_data, axes = (0,1,2)), axes=(0,1,2), overwrite_x=True), axes = (0,1,2)) # get image, shape (x, y, z, ch)
@@ -234,8 +238,12 @@ def global_rovir(inputs, nc, data, dataID, method, threshold, maskA, maskB, ref_
 
     eigenvec = rovir(nc, brain_covar, face_covar)
 
+    # plot the retention comparison 
+    if compute_compare_retention:
+        compare_retention(data, eigenvec, brain_covar, face_covar, nc, data.shape[0]//2, show_compare_retention, save_compare_retention)
+
     if "top_coils" not in inputs["coil_selection"]: # choose based on heuristics the number of eigenvectors to retain
-        top_eigenvec = top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, 'global', inputs["visualization"]["plt_on"])
+        top_eigenvec = top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, 'global', compute_metric_graphs, show_metric_graphs, save_metric_graphs)
     
     else: # if user specifies the number of top virtual coils to keep, use that 
         top_eigenvec = inputs["coil_selection"]["top_coils"]
@@ -258,9 +266,13 @@ def global_rovir(inputs, nc, data, dataID, method, threshold, maskA, maskB, ref_
     virtual_coil_data = form_virtual_coil_data(eigenvec_retain, data) 
     print(GREEN + f'Virtual coils successfully formed' + RESET)
 
+    # compute the image for virtual coils and display
+    if compute_virtual_coil_images:
+        virtual_coil_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_coil_data, axes = (0,1,2)), axes=(0,1,2), overwrite_x=True), axes = (0,1,2)) # get image, shape (x, y, z, ch)
+        display_virtual_coils(virtual_coil_img, data.shape[0]//2, '', show_virtual_coil_images, save_virtual_coil_images,0)
+
     # save final defaced raw data
     if inputs["output"]["save_defaced_kspace"] == True:
         np.save(f'results/defaced_{dataID}.npy', virtual_coil_data)
 
     return virtual_coil_data, top_eigenvec, brain_retain, face_retain
-

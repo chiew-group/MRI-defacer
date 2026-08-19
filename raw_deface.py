@@ -23,8 +23,7 @@ from slice_by_slice_ROVir import slice_by_slice_rovir
 
 from visualization import display_defaced
 from visualization import compare_retention
-from visualization import show_virtual_coils
-from visualization import closest_factors
+from visualization import display_virtual_coils
 
 from to_nifti import niftify
 
@@ -287,13 +286,6 @@ def compute_image(data):
     rsos_image = np.sqrt(rsos_image) # compute root sum of squares
     return rsos_image
 
-
-
-# def regularization(matrix, tolerance=1e-6):
-#     eigvals = np.linalg.eigvalsh(matrix) # compute eigenvalues
-#     epsilon = tolerance * eigvals[-1] 
-#     return matrix + epsilon * np.eye(matrix.shape[0], dtype=matrix.dtype)
-
 def run_raw_deface(config='config.json'):
 
     matplotlib.use('Qt5Agg')
@@ -306,6 +298,23 @@ def run_raw_deface(config='config.json'):
     # loading inputs from config file
     with open(config, 'r') as config_file:
         inputs = json.load(config_file)
+
+    # combine show/save logic for plotting and saving images
+    show_summary = inputs["visualization"]["show"] and inputs["visualization"]["summary_images"]
+    save_summary = inputs["visualization"]["save_images"] and inputs["visualization"]["summary_images"]
+    compute_summary = show_summary or save_summary
+
+    show_metric_graphs = inputs["visualization"]["show"] and inputs["visualization"]["metric_graphs"]
+    save_metric_graphs = inputs["visualization"]["save_images"] and inputs["visualization"]["metric_graphs"]
+    compute_metric_graphs = show_metric_graphs or save_metric_graphs
+
+    show_virtual_coil_images = inputs["visualization"]["show"] and inputs["visualization"]["virtual_coils"]
+    save_virtual_coil_images = inputs["visualization"]["save_images"] and inputs["visualization"]["virtual_coils"]
+    compute_virtual_coil_images = show_virtual_coil_images or save_virtual_coil_images
+
+    show_compare_retention = inputs["visualization"]["show"] and inputs["visualization"]["compare_retention"]
+    save_compare_retention = inputs["visualization"]["save_images"] and inputs["visualization"]["compare_retention"]
+    compute_compare_retention = show_compare_retention or save_compare_retention
 
     # ====================================================================================
     # PREPROCESS THE DATA 
@@ -471,15 +480,19 @@ def run_raw_deface(config='config.json'):
     
     if inputs["mode"] == "global":
         from global_ROVir import global_rovir
-        virtual_coil_data, top_eigenvec, brain_retain, face_retain = global_rovir(inputs, nc, data, dataID, method, threshold, maskA, maskB, ref_data)
+        virtual_coil_data, top_eigenvec, brain_retain, face_retain = global_rovir(inputs, nc, data, dataID, method, threshold, maskA, maskB, 
+                                                                                  compute_metric_graphs, show_metric_graphs, save_metric_graphs, 
+                                                                                  compute_compare_retention, show_compare_retention, save_compare_retention,
+                                                                                  compute_virtual_coil_images, show_virtual_coil_images, save_virtual_coil_images,
+                                                                                  ref_data)
 
     elif inputs["mode"] == "by_slice":
         from slice_by_slice_ROVir import slice_by_slice_rovir
         virtual_coil_data, top_eigenvec, brain_retain, face_retain = slice_by_slice_rovir(inputs, nc, data, dataID, method, threshold, readout_axis, maskA, maskB, ref_data)
 
     defaced_image = compute_image(virtual_coil_data) # compute rsos defaced image
-    if inputs["visualization"]["plt_on"]:
-        display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, brain_retain, face_retain) # display images
+    if compute_summary:
+        display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, show_summary, save_summary) # display images
 
     # non_readout_axes = tuple(ax for ax in (0, 1, 2) if ax != readout_axis) 
     # virtual_coils_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_hybrid, axes = non_readout_axes), axes=non_readout_axes, overwrite_x=True), axes = non_readout_axes)
@@ -522,49 +535,6 @@ def quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, mask_sch
     })
     
     new_log.to_csv('output_log.txt', mode='a', header= not os.path.exists('output_log.txt'), sep='\t')
-
-
-def display_virtual_coils(virtual_coil_data, slice_index, name, axis=0):
-    '''
-    Visualizes each individual virtual coil's reconstructed image at a single slice
-    along the given spatial axis.
-
-    Parameters
-    ----------
-        virtual_coil_data -> np.ndarray: the defaced k-space data with virtual coils, shape (x, y, z, nv)
-        slice_index -> int: the slice index along `axis` to visualize
-        axis -> int: which spatial axis to slice along (0 = x/sagittal, 1 = y/coronal, 2 = z/axial)
-    '''
-    import matplotlib.pyplot as plt
-
-    view_names = {0: 'sagittal x', 1: 'coronal y', 2: 'axial z'}
-
-    nv = virtual_coil_data.shape[3]
-    (nrow, ncol) = closest_factors(nv)
-
-
-    vmin = 0
-    vmax = np.percentile(np.abs(np.concatenate([
-        virtual_coil_data.ravel()
-    ])), 99.5)
-
-    plt.rcParams['savefig.dpi']=600
-    plt.figure()
-    plt.suptitle(f'{name} ({view_names[axis]} slice: {slice_index})')
-    for coil in range(nv):
-        # reconstruct one channel at a time and keep only the slice of interest, to avoid
-        # holding every channel's full 3D image in memory at once
-
-        plt.subplot(nrow, ncol, coil + 1)
-        plt.axis('off')
-        plt.text(0, 0, f'{coil}', color='red')
-
-        if axis == 0 : 
-            plt.imshow(np.rot90(np.abs(virtual_coil_data[slice_index,:,:,coil])), cmap='gray', vmin=vmin, vmax=vmax)
-        elif axis == 2:
-            plt.imshow(np.rot90(np.abs(virtual_coil_data[:,:,slice_index,coil])), cmap='gray', vmin=vmin, vmax=vmax)
-
-    plt.show()
 
 
 if __name__ == "__main__":
