@@ -1,10 +1,8 @@
 from global_ROVir import form_virtual_coil_data, top_nv
-from raw_deface import compute_image, quality_log, display_virtual_coils
-from to_nifti import niftify
+from visualization import display_virtual_coils
 import scipy as sp
 import numpy as np
 from scipy.linalg import eigh, orth, norm
-from visualization import display_defaced
 
 
 # colours for print statements
@@ -97,7 +95,10 @@ def is_well_conditioned(matrix, tolerance=1e-6):
     eigvals = np.linalg.eigvalsh(matrix) # compute eigenvalues
     return eigvals[0] > tolerance * eigvals[-1]   # smallest eigenvalue meaningfully large relative to the biggest
 
-def slice_by_slice_rovir(inputs, nc, data, dataID, method, threshold, readout_axis, maskA, maskB, ref_data=None):
+def slice_by_slice_rovir(inputs, nc, data, dataID, method, threshold, readout_axis, maskA, maskB, 
+                         compute_metric_graphs, show_metric_graphs, save_metric_graphs, 
+                         compute_virtual_coil_images, show_virtual_coil_images, save_virtual_coil_images,
+                         ref_data=None):
     
     brain_covars = [] # to store the brain covariance matrix for each slice, list of nc x nc matrices
     face_covars = [] # to store the face covariance matrix for each slice, list of nc x nc matrices
@@ -133,7 +134,7 @@ def slice_by_slice_rovir(inputs, nc, data, dataID, method, threshold, readout_ax
         eigenvecs.append(eigenvec) # append eigenvec for current slice
     
         if "top_coils" not in inputs["coil_selection"]: # choose based on heuristics the number of eigenvectors to retain
-            cur_top_eigenvec = top_nv(eigenvec, nc, A, B, method, threshold, 'slice_by_slice', inputs["visualization"]["graph"], [data.shape[readout_axis]//2], slice_num)
+            cur_top_eigenvec = top_nv(eigenvec, nc, A, B, method, threshold, 'slice_by_slice', compute_metric_graphs, show_metric_graphs, save_metric_graphs, [data.shape[readout_axis]//2], slice_num)
             num_top_eigenvecs.append(cur_top_eigenvec) # append recommended number of top eigenvecs to retain
 
     # np.save(f'results/{dataID}_eigenvecs.npy', eigenvecs) 
@@ -206,14 +207,16 @@ def slice_by_slice_rovir(inputs, nc, data, dataID, method, threshold, readout_ax
         cur_virtual_coil_data = form_virtual_coil_data(eigenvec_retain, slice) # form virtual coils for this slice
         virtual_coil_data_all_slices.append(cur_virtual_coil_data)
 
-    # ======== display virtual coils for unaligned stuff ============
+    # ======== display virtual coils for unaligned stuff  (delete later) ============
+
     virtual_hybrid_unaligned = np.stack(virtual_coil_data_all_slices_unaligned, axis=readout_axis) # stack along the x axis to form (x, ky, kz, nv)
     del virtual_coil_data_all_slices_unaligned
-    remaining_axes = tuple(ax for ax in (0, 1, 2) if ax != readout_axis) # the two axes still in k-space after the 1D readout ifft
-    virtual_coil_data_unaligned = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_hybrid_unaligned, axes = remaining_axes), axes=remaining_axes, overwrite_x=True), axes = remaining_axes)
-    display_virtual_coils(virtual_coil_data_unaligned, 60, 'Virtual Coils Before Alignment',axis=0) # sagittal view
-    display_virtual_coils(virtual_coil_data_unaligned, 60, 'Virtual Coils Before Alignment', axis=2) # axial view, matches readout_axis
 
+    if compute_virtual_coil_images:
+        remaining_axes = tuple(ax for ax in (0, 1, 2) if ax != readout_axis) # the two axes still in k-space after the 1D readout ifft
+        virtual_coil_data_unaligned = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_hybrid_unaligned, axes = remaining_axes), axes=remaining_axes, overwrite_x=True), axes = remaining_axes)
+        display_virtual_coils(virtual_coil_data_unaligned, 60, 'Virtual Coils Before Alignment', show_virtual_coil_images, save_virtual_coil_images, axis=0) # sagittal view
+        display_virtual_coils(virtual_coil_data_unaligned, 60, 'Virtual Coils Before Alignment', show_virtual_coil_images, save_virtual_coil_images, axis=2) # axial view, matches readout_axis
 
     # ===============================================================
     print(GREEN + f'Mean Brain Signal Retention: {weighted_mean_brain_retain}')
@@ -222,13 +225,19 @@ def slice_by_slice_rovir(inputs, nc, data, dataID, method, threshold, readout_ax
     virtual_hybrid = np.stack(virtual_coil_data_all_slices, axis=readout_axis) # stack along the x axis to form (x, ky, kz, nv)
     del virtual_coil_data_all_slices
 
-    # save virtual hybrid data after phase alignment to check
+    if compute_virtual_coil_images: # compute images for viewing virtual coils after alignment
+        non_readout_axes = tuple(ax for ax in (0, 1, 2) if ax != readout_axis) 
+        virtual_coils_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_hybrid, axes = non_readout_axes), axes=non_readout_axes, overwrite_x=True), axes = non_readout_axes)
+        display_virtual_coils(virtual_coils_img, 60, 'Virtual Coils After Alignment', show_virtual_coil_images, save_virtual_coil_images, axis=0) # sagittal view
+        display_virtual_coils(virtual_coils_img, 60, 'Virtual Coils After Alignment', show_virtual_coil_images, save_virtual_coil_images, axis=2) # axial view
+
+    # save virtual hybrid data after phase alignment to check (delete later) ===============
     np.save(f'results/unaligned_{dataID}_readout{readout_axis}.npy', virtual_hybrid_unaligned)
     print(f'Unaligned virtual coil data saved to results/unaligned_{dataID}_readout{readout_axis}.npy')
 
     np.save(f'results/aligned_{dataID}_readout{readout_axis}.npy', virtual_hybrid)
     print(f'Aligned virtual coil data saved to results/aligned_{dataID}_readout{readout_axis}.npy')
-    # exit()
+    #========================================================================================
 
     # fft along the readout axis to obtain fully spatial frequency defaced data
     virtual_coil_data = sp.fft.fftshift(sp.fft.fft(sp.fft.fftshift(virtual_hybrid, axes = (readout_axis)), axis=readout_axis, overwrite_x=True), axes = (readout_axis))

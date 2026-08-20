@@ -16,8 +16,6 @@ from scipy.ndimage import binary_dilation
 import matplotlib
 import pandas as pd
 
-from slice_by_slice_ROVir import slice_by_slice_rovir
-
 from visualization import display_defaced
 
 from to_nifti import niftify
@@ -482,16 +480,14 @@ def run_raw_deface(config='config.json'):
 
     elif inputs["mode"] == "by_slice":
         from slice_by_slice_ROVir import slice_by_slice_rovir
-        virtual_coil_data, top_eigenvec, brain_retain, face_retain = slice_by_slice_rovir(inputs, nc, data, dataID, method, threshold, readout_axis, maskA, maskB, ref_data)
+        virtual_coil_data, top_eigenvec, brain_retain, face_retain = slice_by_slice_rovir(inputs, nc, data, dataID, method, threshold, readout_axis, maskA, maskB, 
+                                                                                          compute_metric_graphs, show_metric_graphs, save_metric_graphs, 
+                                                                                          compute_virtual_coil_images, show_virtual_coil_images, save_virtual_coil_images,
+                                                                                          ref_data)
 
     defaced_image = compute_image(virtual_coil_data) # compute rsos defaced image
     if compute_summary:
         display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, show_summary, save_summary) # display images
-
-    # non_readout_axes = tuple(ax for ax in (0, 1, 2) if ax != readout_axis) 
-    # virtual_coils_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_hybrid, axes = non_readout_axes), axes=non_readout_axes, overwrite_x=True), axes = non_readout_axes)
-    # display_virtual_coils(virtual_coils_img, 60, 'Virtual Coils After Alignment', axis=0) # sagittal view
-    # display_virtual_coils(virtual_coils_img, 60, 'Virtual Coils After Alignment', axis=2) # sagittal view
 
     # save nifti of results for visualization in 3DSlicer
     if inputs["output"]["save_defaced_image"] == True:
