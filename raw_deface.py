@@ -487,11 +487,11 @@ def run_raw_deface(config='config.json'):
 
     defaced_image = compute_image(virtual_coil_data) # compute rsos defaced image
     if compute_summary:
-        display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, show_summary, save_summary) # display images
+        display_defaced(og_image_rsos, defaced_image, x_slice, y_slice, z_slice, maskA, maskB, show_summary, save_summary, f'{dataID}_nv={top_eigenvec}_brain={brain_retain:.2}_face={face_retain:.2}') # display images
 
     # save nifti of results for visualization in 3DSlicer
     if inputs["output"]["save_defaced_image"] == True:
-        niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'results/defaced_{dataID}_n={top_eigenvec}_brain={brain_retain:.2}_face={face_retain:.2}')
+        niftify(defaced_image, abs(a11), abs(a22), abs(a33), f'results/defaced_{dataID}_nv={top_eigenvec}_brain={brain_retain:.2}_face={face_retain:.2}')
 
     mask_scheme = inputs["masks"]["manipulation"] if "manipulation" in inputs["masks"] else None
     quality_log(dataID, top_eigenvec, brain_retain, face_retain, maskA, mask_scheme, method, threshold)

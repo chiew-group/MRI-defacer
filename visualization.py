@@ -16,7 +16,7 @@ if 'ipykernel' in str(get_ipython()):
 else:
     matplotlib.use('Qt5Agg')         
 
-def plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain, face_retain, show_metric_graphs, save_metric_graphs, title =''):
+def plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain, face_retain, show_metric_graphs, save_metric_graphs, save_path, plot_title =''):
 
     plt.figure(figsize=(16, 10), dpi=120)
 
@@ -24,7 +24,7 @@ def plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain,
     plt.subplot(2,2,1)
     plt.scatter(xaxis, sirs, c = "blue")
     plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
-    plt.title(f"SIR of Each Virtual Coil {title}")
+    plt.title(f"SIR of Each Virtual Coil {plot_title}")
     plt.xlabel("jth Coil")
     plt.legend()
     plt.autoscale(enable=True, axis='both', tight=True)
@@ -32,7 +32,7 @@ def plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain,
     plt.subplot(2,2,2)
     plt.scatter(xaxis, brain_signal, c = "green")
     plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
-    plt.title(f"Signal Energy of Each Virtual Coil {title}")
+    plt.title(f"Signal Energy of Each Virtual Coil {plot_title}")
     plt.xlabel("jth Coil")
     plt.legend()
     plt.autoscale(enable=True, axis='both', tight=True)
@@ -40,7 +40,7 @@ def plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain,
     plt.subplot(2,2,3)
     plt.scatter(xaxis, face_signal, c = "red")
     plt.axvline(x=coil+1, linestyle = "--", label = "Threshold")
-    plt.title(f"Interference Energy of Each Virtual Coil {title}")
+    plt.title(f"Interference Energy of Each Virtual Coil {plot_title}")
     plt.xlabel("jth Coil")
     plt.legend()
     plt.autoscale(enable=True, axis='both', tight=True)
@@ -52,19 +52,19 @@ def plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain,
     plt.ylabel("Percentage Retained (%)")
     plt.xlabel("Total Channels Retained (N)")
     plt.legend()
-    plt.title(f"Brain/Face Signal Retention vs Virtual Coils Retained {title}")
+    plt.title(f"Brain/Face Signal Retention vs Virtual Coils Retained {plot_title}")
     plt.autoscale(enable=True, axis='both', tight=True)
     plt.tight_layout(pad=3)
 
     if save_metric_graphs:
-        plt.savefig(F'results/blah.png') # CHANGE THIS LATER
+        plt.savefig(F'results/{save_path}_metric_graphs.png')
 
     if show_metric_graphs:
         plt.show()
 
 
 def display_defaced(og_image_rsos, defaced_image_rsos, x_slice, y_slice, z_slice, 
-            maskA, maskB, show_summary, save_summary):
+            maskA, maskB, show_summary, save_summary, save_path):
     '''
     Visualize the x_slice, y_slice, and z_slice slices of the
     original image, defaced image, and masks overlayed. 
@@ -109,6 +109,7 @@ def display_defaced(og_image_rsos, defaced_image_rsos, x_slice, y_slice, z_slice
     global_vmin = np.min([ratio[:, :, z_slice].min(), ratio[:, y_slice, :].min(), ratio[x_slice, :, :].min()])
     global_vmax = np.max([ratio[:, :, z_slice].max(), ratio[:, y_slice, :].max(), ratio[x_slice, :, :].max()])
 
+    plt.figure(figsize=(16,12))
     plt.subplot(3,4,1)
     plt.title(f'Original Images')
     plt.axis('off')
@@ -163,35 +164,45 @@ def display_defaced(og_image_rsos, defaced_image_rsos, x_slice, y_slice, z_slice
     ratio_colourbar = plt.colorbar(ratio_sag, cax=ratio_colourbar_ax, orientation='vertical')
     ratio_colourbar.set_label('Retention Ratio', fontsize=10)
 
-    # x_slices = og_image_rsos.shape[0]
-    # (nrow, ncol) = closest_factors(x_slices)
-    # for x_slice in range(0, x_slices):
-   
-    #     plt.subplot(nrow,ncol,x_slice+1)
-    #     plt.axis('off')
-    #     plt.text(0, 0, f'{x_slice}', fontsize=6, color='black')
-    #     plt.imshow(np.rot90(ratio[x_slice, :, :]), cmap='RdYlGn', vmin=global_vmin, vmax=global_vmax)   
-    # plt.show()
+    if save_summary:
+            plt.savefig(f'results/{save_path}_defacing_summary.png')
 
-    # x_slices = og_image_rsos.shape[0]
-    # (nrow, ncol) = closest_factors(x_slices)
-    # for x_slice in range(0, x_slices):
+    plt.figure(figsize=(20,20))
+    # ratio map sweep over x slices to check for irregular signal loss
+    x_slices = og_image_rsos.shape[0]
+    (nrow, ncol) = closest_factors(x_slices)
+    for x_slice in range(0, x_slices):
    
-    #     plt.subplot(nrow,ncol,x_slice+1)
-    #     plt.axis('off')
-    #     plt.text(0, 0, f'{x_slice}', fontsize=6, color='black')
-    #     plt.imshow(np.rot90(defaced_image_rsos[x_slice, :, :]), cmap='gray')   
-    #     plt.imshow(np.rot90(maskB[x_slice, :, :]), alpha = 0.3, cmap = 'Reds')
-    #     plt.imshow(np.rot90(maskA[x_slice, :, :]), alpha = 0.3, cmap = 'Greens')
+        plt.subplot(nrow,ncol,x_slice+1)
+        plt.axis('off')
+        plt.text(0, 0, f'{x_slice}', fontsize=6, color='black')
+        plt.imshow(np.rot90(ratio[x_slice, :, :]), cmap='RdYlGn', vmin=global_vmin, vmax=global_vmax)   
+
 
     if save_summary:
-        plt.savefig(f'results/hello.png') #CHANGE THIS NAMING CONVENTION
+            plt.savefig(f'results/{save_path}_ratio_sweep_x.png')
+    
+    plt.figure(figsize=(20,20))
+    # masking sweep over x slices to check for irregular masks
+    x_slices = og_image_rsos.shape[0]
+    (nrow, ncol) = closest_factors(x_slices)
+    for x_slice in range(0, x_slices):
+   
+        plt.subplot(nrow,ncol,x_slice+1)
+        plt.axis('off')
+        plt.text(0, 0, f'{x_slice}', fontsize=6, color='black')
+        plt.imshow(np.rot90(defaced_image_rsos[x_slice, :, :]), cmap='gray')   
+        plt.imshow(np.rot90(maskB[x_slice, :, :]), alpha = 0.3, cmap = 'Reds')
+        plt.imshow(np.rot90(maskA[x_slice, :, :]), alpha = 0.3, cmap = 'Greens')
 
+    if save_summary:
+        plt.savefig(f'results/{save_path}_masking_sweep_x.png')
     if show_summary:
         plt.show()
+    else:
+        plt.close('all')
 
-
-def compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice, show_compare_retention, save_compare_retention):
+def compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice, show_compare_retention, save_compare_retention, save_path):
     '''
     Visualizes the image retaining 1, 2, 3, ..., nc virtual coils to
     compare the defacing results depending on the number of top
@@ -232,7 +243,7 @@ def compare_retention(data, eigenvec, brain_covar, face_covar, nc, x_slice, show
         plt.imshow(np.rot90(image_rsos[x_slice, :, :]), cmap = 'gray', vmin = 0 , vmax = 800000000000)
 
     if save_compare_retention:
-        plt.savefig(f'results/fdsal.png') # CHANGE THIS LATER
+        plt.savefig(f'results/{save_path}_compare_retention.png') 
     if show_compare_retention:
         plt.show()
 
@@ -266,7 +277,7 @@ def show_virtual_coils(data, eigenvec, x_slice):
 
 
 
-def display_virtual_coils(virtual_coil_data, slice_index, name, show_virtual_coil_images, save_virtual_coil_images, axis=0):
+def display_virtual_coils(virtual_coil_data, slice_index, name, show_virtual_coil_images, save_virtual_coil_images, save_path, axis=0):
     '''
     Visualizes each individual virtual coil's reconstructed image at a single slice
     along the given spatial axis.
@@ -307,6 +318,6 @@ def display_virtual_coils(virtual_coil_data, slice_index, name, show_virtual_coi
             plt.imshow(np.rot90(np.abs(virtual_coil_data[:,:,slice_index,coil])), cmap='gray', vmin=vmin, vmax=vmax)
 
     if save_virtual_coil_images:
-        plt.savefig('results/CHAGNRE.png')# CHANGE THIS LATER
+        plt.savefig(f'results/{save_path}_virtual_coils.png')
     if show_virtual_coil_images:
         plt.show()

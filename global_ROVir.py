@@ -78,7 +78,7 @@ def elbow_finder(nc, metric, sensitivity, curve_type, curve_direction):
     return kneedle.elbow
 
 
-def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, mode, compute_metric_graphs, show_metric_graphs, save_metric_graphs, plot_slices=None, cur_slice=None):
+def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, mode, compute_metric_graphs, show_metric_graphs, save_metric_graphs, save_path, plot_slices=None, cur_slice=None):
     '''
     Selects the top eigenvectors based on SIR, coil signal energy, coil interference energy, 
     ROI signal retention, or interference signal retention. 
@@ -149,12 +149,12 @@ def top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, mode, compu
     xaxis = np.arange(1, nc+1)
 
     if compute_metric_graphs and mode == 'global':
-        plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain, face_retain, show_metric_graphs, save_metric_graphs, '- Global ROVir')
+        plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain, face_retain, show_metric_graphs, save_metric_graphs, save_path, '- Global ROVir')
 
     if compute_metric_graphs and mode == 'slice_by_slice' and plot_slices:
         for plot_slice in plot_slices:
             if cur_slice == plot_slice: 
-                plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain, face_retain, show_metric_graphs, save_metric_graphs, f'(slice {cur_slice})')
+                plot_metrics(xaxis, coil, nc, sirs, brain_signal, face_signal, brain_retain, face_retain, show_metric_graphs, save_metric_graphs, save_path, f'(slice {cur_slice})')
 
     return coil + 1 # plus 1 because slicing is not inclusive, i.e if eigenvec[:,:coil], coil is not included
 
@@ -238,10 +238,10 @@ def global_rovir(inputs, nc, data, dataID, method, threshold, maskA, maskB,
 
     # plot the retention comparison 
     if compute_compare_retention:
-        compare_retention(data, eigenvec, brain_covar, face_covar, nc, data.shape[0]//2, show_compare_retention, save_compare_retention)
+        compare_retention(data, eigenvec, brain_covar, face_covar, nc, data.shape[0]//2, show_compare_retention, save_compare_retention, f'{dataID}')
 
     if "top_coils" not in inputs["coil_selection"]: # choose based on heuristics the number of eigenvectors to retain
-        top_eigenvec = top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, 'global', compute_metric_graphs, show_metric_graphs, save_metric_graphs)
+        top_eigenvec = top_nv(eigenvec, nc, brain_covar, face_covar, method, threshold, 'global', compute_metric_graphs, show_metric_graphs, save_metric_graphs, f'{dataID}_global_rovir')
     
     else: # if user specifies the number of top virtual coils to keep, use that 
         top_eigenvec = inputs["coil_selection"]["top_coils"]
@@ -267,7 +267,7 @@ def global_rovir(inputs, nc, data, dataID, method, threshold, maskA, maskB,
     # compute the image for virtual coils and display
     if compute_virtual_coil_images:
         virtual_coil_img = sp.fft.fftshift(sp.fft.ifftn(sp.fft.fftshift(virtual_coil_data, axes = (0,1,2)), axes=(0,1,2), overwrite_x=True), axes = (0,1,2)) # get image, shape (x, y, z, ch)
-        display_virtual_coils(virtual_coil_img, data.shape[0]//2, '', show_virtual_coil_images, save_virtual_coil_images,0)
+        display_virtual_coils(virtual_coil_img, data.shape[0]//2, '', show_virtual_coil_images, save_virtual_coil_images, f'{dataID}', 0)
 
     # save final defaced raw data
     if inputs["output"]["save_defaced_kspace"] == True:
